@@ -1,0 +1,236 @@
+import Charts
+import SwiftUI
+#if os(macOS)
+import ServiceManagement
+#endif
+
+/// Launch options, sounds, onboarding replay and app info.
+struct SettingsView: View {
+    let vpn: VPNManager
+    @AppStorage("onboardingDone") private var onboardingDone = true
+    @State private var week = TrafficStats.last(7)
+    @State private var statsCleared = false
+    #if os(macOS)
+    @AppStorage("autoConnect") private var autoConnect = false
+    @AppStorage("sounds") private var sounds = true
+    @AppStorage("autoReconnect") private var autoReconnect = true
+    @AppStorage("showMenuBar") private var showMenuBar = true
+    @AppStorage("notifications") private var notifications = true
+    @AppStorage("autoUpdateCheck") private var autoUpdateCheck = true
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    private var updater: Updater { .shared }
+    /// Applied by macOS at the next launch.
+    @State private var language = (UserDefaults.standard.stringArray(forKey: "AppleLanguages")?.first.map { String($0.prefix(2)) }).flatMap { ["ru", "en"].contains($0) ? $0 : nil } ?? "system"
+    @State private var showDiagnostics = false
+    @State private var forgotten = false
+    #endif
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 12) {
+                ScreenHeader(title: "Настройки") { EmptyView() }
+                ScrollView {
+                    VStack(spacing: 22) {
+                        statsCard.appear(0)
+                        #if os(macOS)
+                        ListSection(title: "Запуск") {
+                            toggleRow("Подключаться при запуске", $autoConnect)
+                            toggleRow("Переподключаться при обрыве", $autoReconnect)
+                            toggleRow("Звук при подключении", $sounds)
+                            toggleRow("Запускать при входе в систему", Binding(get: { launchAtLogin }, set: setLaunchAtLogin))
+                            toggleRow("Значок в строке меню", $showMenuBar)
+                            toggleRow("Уведомления о подписке", $notifications)
+                        }
+                        .appear(1)
+                        ListSection(title: "Обновления", footer: updateFooter) {
+                            toggleRow("Проверять автоматически", $autoUpdateCheck)
+                            buttonRow(updateTitle, "arrow.down.circle") { updateAction() }
+                        }
+                        .appear(2)
+                        ListSection(title: "Язык", footer: "Язык сменится после перезапуска приложения.") {
+                            ListRow {
+                                Text("Язык интерфейса")
+                                Spacer()
+                                Picker("", selection: Binding(get: { language }, set: setLanguage)) {
+                                    Text("Как в системе").tag("system")
+                                    Text("Русский").tag("ru")
+                                    Text("English").tag("en")
+                                }
+                                .labelsHidden().fixedSize()
+                            }
+                        }
+                        .appear(2)
+                        ListSection(title: "Доступ", footer: "После первого подключения пароль администратора больше не нужен. Эта кнопка отменяет разрешение.") {
+                            buttonRow("Диагностика и журнал ядра", "stethoscope") { showDiagnostics = true }
+                            buttonRow(forgotten ? "Готово: пароль снова нужен" : "Снова спрашивать пароль", "key") {
+                                Task { await vpn.forgetAdminAccess(); forgotten = true }
+                            }
+                        }
+                        .appear(2)
+                        #endif
+                        ListSection(footer: "Статистика хранится только на этом устройстве.") {
+                            buttonRow(statsCleared ? "Статистика сброшена" : "Сбросить статистику трафика", "trash") {
+                                TrafficStats.reset(); week = TrafficStats.last(7); statsCleared = true
+                            }
+                        }
+                        .appear(3)
+                        ListSection {
+                            buttonRow("Показать приветствие снова", "sparkles") { withAnimation(.smooth) { onboardingDone = false } }
+                        }
+                        .appear(3)
+                        ListSection(footer: "Kitsune не собирает данные и не видит, какие сайты вы открываете.") {
+                            ListRow { Text("Версия"); Spacer(); Text(version).foregroundStyle(.secondary) }
+                            ListRow { Text("Ядро"); Spacer(); Text("sing-box").foregroundStyle(.secondary) }
+                        }
+                        .appear(4)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 24)
+                }
+            }
+            .iOSNavigation(title: "Настройки") { EmptyView() }
+            .task {
+                while !Task.isCancelled {
+                    week = TrafficStats.last(7)
+                    try? await Task.sleep(for: .seconds(3))
+                }
+            }
+            #if os(macOS)
+            .sheet(isPresented: $showDiagnostics) { DiagnosticsView(vpn: vpn, server: nil) }
+            #endif
+        }
+    }
+
+    private var version: String {
+        let info = Bundle.main.infoDictionary
+        return "\(info?["CFBundleShortVersionString"] as? String ?? "?") (\(info?["CFBundleVersion"] as? String ?? "?"))"
+    }
+
+    private let accent = Color(red: 1.0, green: 0.50, blue: 0.10)
+    private let muted = Color.white.opacity(0.28)
+
+    #if os(macOS)
+    private func setLaunchAtLogin(_ on: Bool) {
+        // Unsigned builds can be refused; the toggle then falls back to the real state.
+        _ = on ? try? SMAppService.mainApp.register() : try? SMAppService.mainApp.unregister()
+        launchAtLogin = SMAppService.mainApp.status == .enabled
+        if on && SMAppService.mainApp.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
+    }
+
+    private func setLanguage(_ code: String) {
+        language = code
+        if code == "system" { UserDefaults.standard.removeObject(forKey: "AppleLanguages") } else { UserDefaults.standard.set([code], forKey: "AppleLanguages") }
+    }
+
+    private var updateTitle: LocalizedStringKey {
+        switch updater.state {
+        case .available(let version, _): "Скачать версию \(version)"
+        case .checking: "Проверяем…"
+        default: "Проверить обновления"
+        }
+    }
+
+    private var updateFooter: LocalizedStringKey {
+        if Updater.feed == nil { return "Канал обновлений не настроен." }
+        return switch updater.state {
+        case .upToDate: "Установлена последняя версия."
+        case .failed: "Не удалось проверить обновления."
+        default: "Ядро sing-box обновляется вместе с приложением."
+        }
+    }
+
+    private func updateAction() {
+        if case .available(_, let url) = updater.state { NSWorkspace.shared.open(url) } else { Task { await updater.check() } }
+    }
+    #endif
+
+    private func bytes(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, countStyle: .binary) }
+
+    /// Weekly traffic: stacked bars (download / upload) on a darker inset panel, a split bar and a per-day summary.
+    private var statsCard: some View {
+        let down = week.reduce(Int64(0)) { $0 + $1.down }
+        let up = week.reduce(Int64(0)) { $0 + $1.up }
+        let total = max(down + up, 1)
+        let downShare = Double(down) / Double(total)
+        let today = week.last.map { $0.down + $0.up } ?? 0
+        return VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("За 7 дней").font(.subheadline).foregroundStyle(.secondary)
+                    Spacer()
+                    legend("Загрузка", accent)
+                    legend("Отдача", muted)
+                }
+                Chart(week) { day in
+                    BarMark(x: .value("День", day.date, unit: .day), y: .value("МБ", Double(day.down) / 1_048_576), width: .ratio(0.55))
+                        .foregroundStyle(by: .value("Тип", "down"))
+                    BarMark(x: .value("День", day.date, unit: .day), y: .value("МБ", Double(day.up) / 1_048_576), width: .ratio(0.55))
+                        .foregroundStyle(by: .value("Тип", "up"))
+                }
+                .chartForegroundStyleScale(["down": accent, "up": muted])
+                .chartLegend(.hidden)
+                .chartXAxis { AxisMarks(values: .stride(by: .day)) { _ in AxisValueLabel(format: .dateTime.weekday(.abbreviated)).foregroundStyle(.secondary) } }
+                .chartYAxis(.hidden)
+                .frame(height: 110)
+            }
+            .padding(14)
+            .background(.black.opacity(0.28), in: .rect(cornerRadius: 18))
+
+            GeometryReader { geo in
+                HStack(spacing: 3) {
+                    Capsule().fill(accent).frame(width: max(6, (geo.size.width - 3) * downShare))
+                    Capsule().fill(muted)
+                }
+            }
+            .frame(height: 6)
+            .padding(.horizontal, 4)
+
+            HStack(alignment: .firstTextBaseline) {
+                stat("Загрузка", bytes(down), accent)
+                Spacer()
+                stat("Отдача", bytes(up), muted)
+                Spacer()
+                stat("Сегодня", bytes(today), .white)
+            }
+            .padding(.horizontal, 4)
+        }
+        .padding(14)
+        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+    }
+
+    private func legend(_ title: LocalizedStringKey, _ color: Color) -> some View {
+        HStack(spacing: 5) {
+            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 8, height: 8)
+            Text(title).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private func stat(_ title: LocalizedStringKey, _ value: String, _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                Circle().fill(color).frame(width: 6, height: 6)
+                Text(title).font(.caption).foregroundStyle(.secondary)
+            }
+            Text(value).font(.system(.body, design: .rounded).weight(.medium)).monospacedDigit()
+        }
+    }
+
+    private func toggleRow(_ title: LocalizedStringKey, _ isOn: Binding<Bool>) -> some View {
+        ListRow {
+            Text(title)
+            Spacer()
+            Toggle("", isOn: isOn).labelsHidden().toggleStyle(.switch).tint(accent)
+        }
+    }
+
+    private func buttonRow(_ title: LocalizedStringKey, _ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            ListRow {
+                Label(title, systemImage: icon)
+                Spacer()
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+    }
+}

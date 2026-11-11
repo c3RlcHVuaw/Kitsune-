@@ -1,0 +1,86 @@
+{
+  "dns" : {
+    "final" : "remote",
+    "servers" : [
+      {
+        "detour" : "proxy",
+        "server" : "1.1.1.1",
+        "tag" : "remote",
+        "type" : "https"
+      },
+      {
+        "server" : "77.88.8.8",
+        "tag" : "russia",
+        "type" : "udp"
+      }
+    ]
+  },
+  "inbounds" : [
+    {
+      "address" : [
+        "172.19.0.1/30",
+        "fdfe:dcba:9876::1/126"
+      ],
+      "auto_route" : true,
+      "strict_route" : true,
+      "tag" : "tun-in",
+      "type" : "tun"
+    }
+  ],
+  "log" : {
+    "level" : "info"
+  },
+  "outbounds" : [
+    {
+      "flow" : "xtls-rprx-vision",
+      "server" : "example.com",
+      "server_port" : 443,
+      "tag" : "s-52ec30ee4b6a6e6dbc29f1bc",
+      "tls" : {
+        "enabled" : true,
+        "reality" : {
+          "enabled" : true,
+          "public_key" : "PUBKEY",
+          "short_id" : "abcd"
+        },
+        "server_name" : "www.microsoft.com",
+        "utls" : {
+          "enabled" : true,
+          "fingerprint" : "safari"
+        }
+      },
+      "type" : "vless",
+      "uuid" : "11111111-2222-3333-4444-555555555555"
+    },
+    {
+      "default" : "s-52ec30ee4b6a6e6dbc29f1bc",
+      "outbounds" : [
+        "s-52ec30ee4b6a6e6dbc29f1bc"
+      ],
+      "tag" : "proxy",
+      "type" : "selector"
+    },
+    {
+      "tag" : "direct",
+      "type" : "direct"
+    }
+  ],
+  "route" : {
+    "auto_detect_interface" : true,
+    "default_domain_resolver" : "russia",
+    "final" : "proxy",
+    "rules" : [
+      {
+        "action" : "sniff"
+      },
+      {
+        "action" : "hijack-dns",
+        "protocol" : "dns"
+      },
+      {
+        "ip_is_private" : true,
+        "outbound" : "direct"
+      }
+    ]
+  }
+}

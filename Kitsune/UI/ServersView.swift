@@ -1,0 +1,464 @@
+import Shared
+import SwiftUI
+
+/// Subscriptions and manual servers: refresh, traffic, expiry, announcements, ping, selection.
+struct ServersView: View {
+    let library: Library
+    let tunnelUp: Bool
+
+    @State var adding = false
+    @State private var editing: ServerConfig?
+    @State var pinging = false
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                VStack(spacing: 12) {
+                ScreenHeader(title: "Серверы", subtitle: pingSubtitle) { toolbarActions }
+                if library.isEmpty {
+                    ContentUnavailableView {
+                        Label("Нет серверов", systemImage: "server.rack")
+                    } description: {
+                        Text("Добавьте ссылку на подписку или на сервер.")
+                    } actions: {
+                        Button("Добавить", systemImage: "plus") { adding = true }
+                            .buttonStyle(.brand)
+                    }
+                } else {
+                    ScrollView {
+                        Group {
+                            LazyVStack(spacing: 22) {
+                                ForEach(Array(library.subscriptions.enumerated()), id: \.element.id) { index, subscription in
+                                    SubscriptionCard(library: library, subscription: subscription).appear(index)
+                                }
+                                if !library.manual.isEmpty {
+                                    ManualCard(library: library, editing: $editing).appear(library.subscriptions.count)
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 24)
+                        }
+                    }
+                    .refreshable {
+                        for subscription in library.subscriptions { await library.refresh(subscription.id) }
+                    }
+                }
+                }
+            }
+            .iOSNavigation(title: "Серверы", subtitle: pingSubtitle) { toolbarActions }
+            .sheet(isPresented: $adding) { AddSheet(library: library) }
+            .frame(maxHeight: .infinity, alignment: .top)
+            .sheet(item: $editing) { server in EditServerSheet(library: library, server: server) }
+        }
+    }
+}
+
+extension ServersView {
+    var pingSubtitle: String {
+        tunnelUp ? L("Пинг — реальная задержка через сервер") : L("Пинг — до сервера, точнее при подключении")
+    }
+
+    @ViewBuilder var toolbarActions: some View {
+        Button("Проверить пинг", systemImage: "speedometer") {
+            pinging = true
+            Task {
+                await library.ping(library.allServers)
+                pinging = false
+            }
+        }
+        .disabled(library.isEmpty || pinging)
+        .symbolEffect(.pulse, isActive: pinging)
+        Button("Добавить", systemImage: "plus") { adding = true }
+    }
+}
+
+// MARK: - Subscription section
+
+/// One glass surface for a group of rows (rows themselves stay flat, so long lists don't stutter).
+private struct Surface<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(spacing: 0) { content }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassEffect(.regular, in: .rect(cornerRadius: 20))
+    }
+}
+
+private struct SubscriptionCard: View {
+    let library: Library
+    let subscription: Subscription
+
+    @Environment(\.openURL) private var openURL
+    @State private var announceExpanded = false
+    private var updating: Bool { library.updating.contains(subscription.id) }
+    private var announce: String? { subscription.info.announce.flatMap { $0.isEmpty ? nil : $0 } }
+    private var hasInfoRows: Bool { hasUsage || announce != nil || subscription.lastError != nil }
+    private var hasUsage: Bool { subscription.info.used != nil || subscription.info.expire != nil }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            header.padding(.horizontal, 6)
+            if hasInfoRows || !subscription.collapsed {
+                Surface {
+                    if hasUsage { usage }
+                    if let announce {
+                        if hasUsage { divider }
+                        Button {
+                            withAnimation(.smooth) { announceExpanded.toggle() }
+                        } label: {
+                            Label(announce, systemImage: "megaphone")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(announceExpanded ? nil : 1)
+                                .multilineTextAlignment(.leading)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint(announceExpanded ? L("Свернуть") : L("Показать полностью"))
+                    }
+                    if let error = subscription.lastError {
+                        divider
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                            Text(String(format: L("Не обновилась: %@"), error)).lineLimit(1)
+                            Spacer(minLength: 4)
+                            Button("Повторить") { Task { await library.refresh(subscription.id) } }
+                                .buttonStyle(.plain)
+                                .fontWeight(.medium)
+                                .disabled(updating)
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(Color.alert)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                    }
+                    if !subscription.collapsed {
+                        if hasInfoRows { divider }
+                        ServerRows(library: library, servers: subscription.servers)
+                    }
+                }
+            }
+        }
+    }
+
+    private var divider: some View { Divider().opacity(0.5).padding(.leading, 16) }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Button {
+                withAnimation(.smooth) { library.toggleCollapsed(subscription.id) }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(subscription.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(subscription.collapsed ? -90 : 0))
+                    if updating { ProgressView().controlSize(.mini) }
+                    Text(subtitle).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(subscription.collapsed ? L("Свёрнуто") : L("Развёрнуто"))
+
+            Menu {
+                Section(String(format: L("Автообновление каждые %lld ч"), subscription.intervalHours) + (subscription.skipped > 0 ? String(format: L(" · пропущено неподдерживаемых: %lld"), subscription.skipped) : "")) {
+                    Button("Обновить сейчас", systemImage: "arrow.clockwise") { Task { await library.refresh(subscription.id) } }
+                        .disabled(updating)
+                }
+                Section {
+                    Button("Проверить пинг", systemImage: "speedometer") { Task { await library.ping(subscription.servers) } }
+                    Button("Самый быстрый", systemImage: "bolt.fill") {
+                        Task {
+                            await library.ping(subscription.servers)
+                            library.selectFastest(in: subscription.servers)
+                        }
+                    }
+                }
+                Section {
+                    Button("Копировать ссылку", systemImage: "doc.on.doc") { Clipboard.copy(subscription.url.absoluteString) }
+                    if let support = subscription.info.supportURL {
+                        Button("Поддержка", systemImage: "questionmark.bubble") { openURL(support) }
+                    }
+                    Button("Удалить подписку", systemImage: "trash", role: .destructive) { library.remove(subscription) }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.medium))
+                    .frame(width: 32, height: 28)
+                    .contentShape(.rect)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("Действия с подпиской")
+        }
+    }
+
+    private var subtitle: String {
+        var parts = ["\(subscription.servers.count) \(serversWord(subscription.servers.count))"]
+        if let date = subscription.updatedAt { parts.append(date.formatted(.relative(presentation: .named, unitsStyle: .abbreviated))) }
+        return "· " + parts.joined(separator: " · ")
+    }
+
+    private var usage: some View {
+        let info = subscription.info
+        let limited = (info.total ?? 0) > 0
+        let fraction = limited ? Double(info.used ?? 0) / Double(info.total ?? 1) : 0
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if let used = info.used {
+                    Text(limited ? String(format: L("%@ из %@"), bytes(used), bytes(info.total ?? 0)) : String(format: L("%@ · безлимит"), bytes(used)))
+                        .foregroundStyle(fraction > 0.9 ? Color.alert : .primary)
+                }
+                Spacer()
+                if let expire = info.expire {
+                    let days = Int((expire.timeIntervalSinceNow / 86400).rounded(.up))
+                    Text(expire < .now ? L("Истекла") : String(format: L("%lld дн. · до %@"), days, expire.formatted(.dateTime.day().month(.abbreviated))))
+                        .foregroundStyle(expire < .now || days <= 3 ? Color.alert : .secondary)
+                }
+            }
+            .font(.subheadline.monospacedDigit())
+            if limited {
+                ProgressView(value: min(fraction, 1)).tint(fraction > 0.9 ? Color.alert : Color(red: 1.0, green: 0.50, blue: 0.10))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private func bytes(_ value: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: value, countStyle: .binary)
+    }
+}
+
+// MARK: - Manual servers
+
+private struct ManualCard: View {
+    let library: Library
+    @Binding var editing: ServerConfig?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Мои серверы").font(.subheadline.weight(.semibold)).padding(.horizontal, 6)
+            Surface { ServerRows(library: library, servers: library.manual, editing: $editing) }
+            Text("Удерживайте сервер, чтобы изменить").font(.footnote).foregroundStyle(.secondary).padding(.horizontal, 6)
+        }
+    }
+}
+
+// MARK: - Server rows
+
+private struct ServerRows: View {
+    let library: Library
+    let servers: [ServerConfig]
+    var editing: Binding<ServerConfig?>?
+
+    var body: some View {
+        // Lazy: a subscription can hold dozens of servers, and building every row at once made the tab stutter.
+        LazyVStack(spacing: 0) {
+            ForEach(servers) { server in
+                ServerRow(server: server, selected: library.selected?.id == server.id, ping: library.pings[server.id]) {
+                    withAnimation(.smooth(duration: 0.25)) { library.selectedID = server.id }
+                }
+                .contextMenu {
+                    Button("Проверить пинг", systemImage: "speedometer") { Task { await library.ping([server]) } }
+                    if let editing {
+                        Button("Изменить", systemImage: "pencil") { editing.wrappedValue = server }
+                        Button("Удалить", systemImage: "trash", role: .destructive) { library.remove(server) }
+                    }
+                }
+                if server.id != servers.last?.id { Divider().opacity(0.5).padding(.leading, 60) }
+            }
+        }
+        .sensoryFeedback(.selection, trigger: library.selected?.id)
+    }
+}
+
+private struct ServerRow: View {
+    let server: ServerConfig
+    let selected: Bool
+    let ping: Ping?
+    var onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 12) {
+                Group {
+                    if let flag = server.flag {
+                        Text(flag).font(.title3)
+                    } else {
+                        Image(systemName: "globe").foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 32)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(server.displayName).font(.body).lineLimit(1)
+                    Text(server.summary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                PingLabel(ping: ping)
+                Image(systemName: "checkmark")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color(red: 1.0, green: 0.50, blue: 0.10))
+                    .opacity(selected ? 1 : 0)
+                    .scaleEffect(selected ? 1 : 0.6)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .frame(minHeight: 48)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityValue(ping?.accessibilityText ?? "")
+    }
+}
+
+private struct PingLabel: View {
+    let ping: Ping?
+
+    var body: some View {
+        switch ping {
+        case .none, .unavailable: EmptyView()
+        case .measuring: ProgressView().controlSize(.mini).tint(.white)
+        case .ms(let ms):
+            label(ms, quality: ms < 150 ? 1 : ms < 400 ? 0.66 : 0.33)
+        case .tunnel(let ms):
+            // A full request through the server takes longer than a handshake, so the scale is wider.
+            label(ms, quality: ms < 600 ? 1 : ms < 1500 ? 0.66 : 0.33)
+        case .failed:
+            Label("нет связи", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(Color.alert)
+        }
+    }
+
+    private func label(_ ms: Int, quality: Double) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "cellularbars", variableValue: quality)
+            Text(String(format: L("%lld мс"), ms)).monospacedDigit().contentTransition(.numericText())
+        }
+        .font(.caption)
+        .animation(.smooth, value: ms)
+    }
+}
+
+extension Ping {
+    var accessibilityText: String {
+        switch self {
+        case .measuring: L("Измеряется пинг")
+        case .ms(let ms): String(format: L("Пинг до сервера %lld миллисекунд"), ms)
+        case .tunnel(let ms): String(format: L("Задержка через сервер %lld миллисекунд"), ms)
+        case .failed: L("Сервер не отвечает")
+        case .unavailable: ""
+        }
+    }
+}
+
+private func serversWord(_ n: Int) -> String {
+    let mod10 = n % 10, mod100 = n % 100
+    if mod10 == 1 && mod100 != 11 { return L("сервер") }
+    if (2...4).contains(mod10) && !(12...14).contains(mod100) { return L("сервера") }
+    return L("серверов")
+}
+
+// MARK: - Sheets
+
+private struct AddSheet: View {
+    let library: Library
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+    @State private var error: String?
+    @State private var busy = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Ссылка на подписку (https://…) или на сервер (vless://, hysteria2://).")
+                        .font(.footnote)
+                        .opacity(0.8)
+                    LinkField(link: $text, error: error)
+                        .onChange(of: text) { error = nil }
+                }
+                .padding(20)
+            }
+            .navigationTitle("Добавить")
+            .inlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена", systemImage: "xmark") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if busy {
+                        ProgressView()
+                    } else {
+                        Button("Добавить", systemImage: "checkmark") { save() }
+                            .disabled(text.isEmpty)
+                    }
+                }
+            }
+        }
+        .adaptiveSheet()
+        .interactiveDismissDisabled(busy)
+    }
+
+    private func save() {
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                try await library.add(any: text)
+                dismiss()
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+}
+
+private struct EditServerSheet: View {
+    let library: Library
+    let server: ServerConfig
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LinkField(link: $text, error: error, placeholder: "Ссылка на сервер")
+                    .onChange(of: text) { error = nil }
+                    .padding(20)
+            }
+            .navigationTitle(server.displayName)
+            .inlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена", systemImage: "xmark") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Сохранить", systemImage: "checkmark") {
+                        do {
+                            try library.replace(server, link: text)
+                            dismiss()
+                        } catch {
+                            self.error = VPNManager.describe(error)
+                        }
+                    }
+                    .disabled(text.isEmpty)
+                }
+            }
+        }
+        .adaptiveSheet()
+        .onAppear { text = server.link ?? "" }
+    }
+}

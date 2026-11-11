@@ -1,0 +1,172 @@
+name: Kitsune
+options:
+  bundleIdPrefix: com.kitsune
+  developmentLanguage: ru
+  deploymentTarget:
+    iOS: "26.0"
+    macOS: "26.0"
+settings:
+  base:
+    DEVELOPMENT_TEAM: 5KKR25Q7R4
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  Shared:
+    path: Shared
+targets:
+  Kitsune:
+    type: application
+    platform: iOS
+    sources:
+      - path: Kitsune
+        excludes: [macOS]
+    dependencies:
+      - package: Shared
+      - target: PacketTunnel
+    entitlements:
+      path: Kitsune/Kitsune.entitlements
+      properties:
+        com.apple.developer.networking.networkextension: [packet-tunnel-provider]
+        com.apple.security.application-groups: [group.com.kitsune.vpn]
+        keychain-access-groups: ["$(AppIdentifierPrefix)com.kitsune.vpn.shared"]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kitsune.vpn
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Kitsune
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+  PacketTunnel:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PacketTunnel
+        excludes: [RuleSets, macOS]
+      # Copied as a folder: PacketTunnel.appex/RuleSets/<tag>.srs
+      - path: PacketTunnel/RuleSets
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - package: Shared
+      - sdk: NetworkExtension.framework
+      - sdk: libresolv.tbd
+      - sdk: UIKit.framework # used inside Libbox by the naive outbound
+      - framework: Frameworks/Libbox.xcframework
+        embed: false
+    info:
+      path: PacketTunnel/Info.plist
+      properties:
+        CFBundleDisplayName: PacketTunnel
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    entitlements:
+      path: PacketTunnel/PacketTunnel.entitlements
+      properties:
+        com.apple.developer.networking.networkextension: [packet-tunnel-provider]
+        com.apple.security.application-groups: [group.com.kitsune.vpn]
+        keychain-access-groups: ["$(AppIdentifierPrefix)com.kitsune.vpn.shared"]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kitsune.vpn.PacketTunnel
+        # gomobile-generated Libbox headers have conflicting nullability annotations.
+        OTHER_SWIFT_FLAGS: "$(inherited) -Xcc -Wno-nullability"
+
+  # macOS: same screens and tunnel code as iOS, sandboxed app + packet-tunnel app extension.
+  KitsuneMac:
+    type: application
+    platform: macOS
+    info:
+      path: Kitsune/macOS/Info.plist
+      properties:
+        # JSON feed {"version","url","notes"} for the update check; empty hides the check.
+        KitsuneUpdateFeed: ""
+        CFBundleURLTypes:
+          - CFBundleURLName: com.kitsune.vpn
+            CFBundleURLSchemes: [vless, hysteria2, hy2, trojan, vmess, ss, kitsune]
+    sources:
+      - path: Kitsune
+        excludes: [macOS, "*.entitlements"]
+    dependencies:
+      - package: Shared
+      - target: PacketTunnelMac
+    entitlements:
+      path: Kitsune/macOS/Kitsune.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.developer.networking.networkextension: [packet-tunnel-provider]
+        com.apple.security.application-groups: [group.com.kitsune.vpn]
+    settings:
+      base:
+        PRODUCT_NAME: Kitsune
+        PRODUCT_BUNDLE_IDENTIFIER: com.kitsune.vpn
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Kitsune
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        ENABLE_HARDENED_RUNTIME: YES
+  PacketTunnelMac:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: PacketTunnel
+        excludes: [RuleSets, macOS, "*.entitlements", Info.plist]
+      - path: PacketTunnel/RuleSets
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - package: Shared
+      - sdk: NetworkExtension.framework
+      - sdk: libresolv.tbd
+      # System frameworks the macOS Libbox slice links against (naive outbound, USB/IP, proxy detection).
+      - sdk: AppKit.framework
+      - sdk: CoreText.framework
+      - sdk: IOUSBHost.framework
+      - sdk: SystemConfiguration.framework
+      - sdk: libbsm.tbd # audit_token_to_pid
+      - framework: Frameworks/Libbox.xcframework
+        embed: false
+    info:
+      path: PacketTunnel/macOS/Info.plist
+      properties:
+        CFBundleDisplayName: PacketTunnel
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    entitlements:
+      path: PacketTunnel/macOS/PacketTunnel.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.network.server: true # local control API on 127.0.0.1
+        com.apple.developer.networking.networkextension: [packet-tunnel-provider]
+        com.apple.security.application-groups: [group.com.kitsune.vpn]
+    settings:
+      base:
+        PRODUCT_NAME: PacketTunnel
+        PRODUCT_BUNDLE_IDENTIFIER: com.kitsune.vpn.PacketTunnel
+        ENABLE_HARDENED_RUNTIME: YES
+        OTHER_SWIFT_FLAGS: "$(inherited) -Xcc -Wno-nullability"
+schemes:
+  KitsuneMac:
+    build:
+      targets:
+        KitsuneMac: all
+  Kitsune:
+    build:
+      targets:
+        Kitsune: all
+    test:
+      targets:
+        - package: Shared/SharedTests
