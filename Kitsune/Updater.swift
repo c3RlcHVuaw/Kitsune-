@@ -2,14 +2,13 @@
 import AppKit
 import Foundation
 
-/// Checks a JSON feed ({"version": "1.2", "url": "https://…/Kitsune-mac.dmg", "notes": "…"}) once a day.
-/// The feed address comes from the KitsuneUpdateFeed key in Info.plist. The app is unsigned, so it only opens the download.
+/// Checks the latest GitHub release once a day. The app is unsigned, so it only opens the download.
 @MainActor @Observable final class Updater {
     static let shared = Updater()
     enum State: Equatable { case idle, checking, upToDate, available(version: String, url: URL), failed }
 
     private(set) var state = State.idle
-    static var feed: URL? { (Bundle.main.object(forInfoDictionaryKey: "KitsuneUpdateFeed") as? String).flatMap { $0.isEmpty ? nil : URL(string: $0) } }
+    static let feed: URL? = URL(string: "https://api.github.com/repos/c3RlcHVuaw/Kitsune-/releases/latest")
 
     func checkIfDue() async {
         guard UserDefaults.standard.object(forKey: "autoUpdateCheck") as? Bool ?? true else { return }
@@ -20,13 +19,16 @@ import Foundation
     func check() async {
         guard let feed = Self.feed else { return }
         state = .checking
-        struct Feed: Decodable { let version: String; let url: URL }
+        struct Asset: Decodable { let name: String; let browser_download_url: URL }
+        struct Feed: Decodable { let tag_name: String; let html_url: URL; let assets: [Asset] }
         do {
             let (data, _) = try await URLSession.shared.data(from: feed)
             let latest = try JSONDecoder().decode(Feed.self, from: data)
             let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
             UserDefaults.standard.set(Date.now.timeIntervalSince1970, forKey: "updateChecked")
-            state = latest.version.compare(current, options: .numeric) == .orderedDescending ? .available(version: latest.version, url: latest.url) : .upToDate
+            let version = latest.tag_name.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+            let url = latest.assets.first { $0.name.hasSuffix(".dmg") }?.browser_download_url ?? latest.html_url
+            state = version.compare(current, options: .numeric) == .orderedDescending ? .available(version: version, url: url) : .upToDate
         } catch {
             state = .failed
         }

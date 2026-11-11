@@ -31,6 +31,10 @@ public enum ConfigBuilder {
 
         if routing.usesUserLists {
             // Per-app rules first (macOS core only; harmless elsewhere): they win over site lists.
+            let known = Set(([server] + servers).map(\.id))
+            for (app, id) in routing.appServers.sorted(by: { $0.key < $1.key }) where known.contains(id) {
+                routeRules.append(["process_name": [app], "outbound": "s-\(id)"])
+            }
             if !routing.directApps.isEmpty { routeRules.append(["process_name": routing.directApps, "outbound": "direct"]) }
             if !routing.proxyApps.isEmpty { routeRules.append(["process_name": routing.proxyApps, "outbound": "proxy"]) }
             if let rule = match(routing.direct) {
@@ -74,7 +78,7 @@ public enum ConfigBuilder {
         ]
         if !ruleSets.isEmpty { route["rule_set"] = ruleSets }
         // process_name rules need the core to look up which process owns each connection.
-        if routing.usesUserLists, !(routing.directApps + routing.proxyApps).isEmpty { route["find_process"] = true }
+        if routing.usesUserLists, !(routing.directApps + routing.proxyApps).isEmpty || !routing.appServers.isEmpty { route["find_process"] = true }
 
         var dns: [String: Any] = [
             "servers": [

@@ -19,6 +19,7 @@ struct RoutingView: View {
                             #if os(macOS)
                             AppsSection(title: "Приложения — всегда напрямую", apps: binding(\.directApps), footer: nil)
                             AppsSection(title: "Приложения — всегда через VPN", apps: binding(\.proxyApps), footer: "Применяется при следующем подключении.")
+                            AppServersSection(library: library)
                             #endif
                             SitesSection(title: "Сайты — всегда напрямую", footer: "Эти сайты и адреса всегда открываются без VPN.",
                                          entries: binding(\.direct))
@@ -141,6 +142,52 @@ private struct AppsSection: View {
         guard panel.runModal() == .OK, let url = panel.url, let bundle = Bundle(url: url),
               let name = bundle.object(forInfoDictionaryKey: "CFBundleExecutable") as? String else { return }
         withAnimation(.smooth) { if !apps.contains(name) { apps.append(name) } }
+    }
+}
+
+/// Apps pinned to a specific server, e.g. one browser through Netherlands while everything else uses the selected server.
+private struct AppServersSection: View {
+    let library: Library
+
+    private var pinned: [(app: String, server: ServerConfig?)] {
+        library.routing.appServers.sorted { $0.key < $1.key }.map { app, id in (app, library.allServers.first { $0.id == id }) }
+    }
+
+    var body: some View {
+        ListSection(title: "Приложения — через свой сервер", footer: "Приложение всегда выходит через выбранный сервер, остальное через основной. Применяется при следующем подключении.") {
+            ForEach(pinned, id: \.app) { item in
+                ListRow {
+                    Text(item.app).lineLimit(1)
+                    Spacer()
+                    Menu {
+                        ForEach(library.allServers) { server in
+                            Button(server.displayName) { library.routing.appServers[item.app] = server.id }
+                        }
+                    } label: {
+                        Text(item.server?.displayName ?? L("сервер удалён")).lineLimit(1).foregroundStyle(.secondary)
+                    }
+                    .menuStyle(.button).buttonStyle(.plain).fixedSize()
+                    Button("Удалить \(item.app)", systemImage: "minus.circle") { withAnimation(.smooth) { _ = library.routing.appServers.removeValue(forKey: item.app) } }
+                        .labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+            }
+            ListRow {
+                Button("Добавить приложение…", systemImage: "plus", action: pick)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(accent)
+            }
+        }
+    }
+
+    private func pick() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(filePath: "/Applications")
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url, let bundle = Bundle(url: url),
+              let name = bundle.object(forInfoDictionaryKey: "CFBundleExecutable") as? String,
+              let server = library.selected ?? library.allServers.first else { return }
+        withAnimation(.smooth) { library.routing.appServers[name] = server.id }
     }
 }
 #endif

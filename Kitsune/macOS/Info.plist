@@ -35,7 +35,5 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
-	<key>KitsuneUpdateFeed</key>
-	<string></string>
 </dict>
 </plist>

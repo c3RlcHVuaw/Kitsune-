@@ -103,3 +103,20 @@ private func routeOutbounds(_ routing: RoutingSettings) throws -> [String] {
     #expect(config.contains("\"process_name\""))
     #expect(config.contains("Telegram") && config.contains("Sber"))
 }
+
+@Test func appServerRuleGoesToThatServersOutbound() throws {
+    let chosen = try ProxyLink.parse(sampleLink)
+    let other = try ProxyLink.parse("hy2://pw@h2.example:443#Two")
+    var routing = RoutingSettings()
+    routing.appServers = ["Safari": other.id, "Gone": "missing"] // unknown server ids are ignored
+    let json = try ConfigBuilder.build(chosen, servers: [other], routing: routing)
+    let config = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+    let route = try #require(config["route"] as? [String: Any])
+    let rules = try #require(route["rules"] as? [[String: Any]])
+    let appRules = rules.filter { $0["process_name"] != nil }
+    #expect(appRules.count == 1)
+    #expect(appRules.first?["outbound"] as? String == ConfigBuilder.tag(for: other))
+    #expect(route["find_process"] as? Bool == true)
+    let old = try JSONDecoder().decode(RoutingSettings.self, from: Data(#"{"profile":"russiaDirect","direct":[],"proxy":[]}"#.utf8))
+    #expect(old.appServers.isEmpty)
+}

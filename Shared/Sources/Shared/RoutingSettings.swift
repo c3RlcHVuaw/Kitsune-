@@ -22,15 +22,18 @@ public struct RoutingSettings: Codable, Equatable, Sendable {
     /// macOS only: process names (e.g. `Telegram`) that always go direct / always through VPN.
     public var directApps: [String]
     public var proxyApps: [String]
+    /// macOS only: process name → id of the server that app always uses (e.g. one browser via Netherlands).
+    public var appServers: [String: String]
 
     public init(profile: Profile = .russiaDirect, direct: [String] = [], proxy: [String] = [], presets: Set<RoutePreset> = [],
-                directApps: [String] = [], proxyApps: [String] = []) {
+                directApps: [String] = [], proxyApps: [String] = [], appServers: [String: String] = [:]) {
         self.profile = profile
         self.direct = direct
         self.proxy = proxy
         self.presets = presets
         self.directApps = directApps
         self.proxyApps = proxyApps
+        self.appServers = appServers
     }
 
     // Settings saved by older versions have no presets or app rules.
@@ -42,6 +45,7 @@ public struct RoutingSettings: Codable, Equatable, Sendable {
         presets = try c.decodeIfPresent(Set<RoutePreset>.self, forKey: .presets) ?? []
         directApps = try c.decodeIfPresent([String].self, forKey: .directApps) ?? []
         proxyApps = try c.decodeIfPresent([String].self, forKey: .proxyApps) ?? []
+        appServers = try c.decodeIfPresent([String: String].self, forKey: .appServers) ?? [:]
     }
 
     /// The user's "through VPN" list plus the domains of every enabled preset.

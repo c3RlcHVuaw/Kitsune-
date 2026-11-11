@@ -1,5 +1,7 @@
 import Charts
+import Shared
 import SwiftUI
+import UniformTypeIdentifiers
 #if os(macOS)
 import ServiceManagement
 #endif
@@ -7,9 +9,13 @@ import ServiceManagement
 /// Launch options, sounds, onboarding replay and app info.
 struct SettingsView: View {
     let vpn: VPNManager
+    let library: Library
+    @State private var showHistory = false
+    @State private var transferNote: LocalizedStringKey?
     @AppStorage("onboardingDone") private var onboardingDone = true
     @State private var week = TrafficStats.last(7)
     @State private var statsCleared = false
+    @State private var leak = LeakCheck()
     #if os(macOS)
     @AppStorage("autoConnect") private var autoConnect = false
     @AppStorage("sounds") private var sounds = true
@@ -17,6 +23,7 @@ struct SettingsView: View {
     @AppStorage("showMenuBar") private var showMenuBar = true
     @AppStorage("notifications") private var notifications = true
     @AppStorage("autoUpdateCheck") private var autoUpdateCheck = true
+    @AppStorage("globalHotkey") private var globalHotkey = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     private var updater: Updater { .shared }
     /// Applied by macOS at the next launch.
@@ -32,6 +39,11 @@ struct SettingsView: View {
                 ScrollView {
                     VStack(spacing: 22) {
                         statsCard.appear(0)
+                        ListSection(title: "Проверка утечек", footer: leakFooter) {
+                            leakRows
+                            buttonRow("Проверить сейчас", "checkmark.shield") { Task { await leak.run() } }
+                        }
+                        .appear(1)
                         #if os(macOS)
                         ListSection(title: "Запуск") {
                             toggleRow("Подключаться при запуске", $autoConnect)
@@ -39,6 +51,7 @@ struct SettingsView: View {
                             toggleRow("Звук при подключении", $sounds)
                             toggleRow("Запускать при входе в систему", Binding(get: { launchAtLogin }, set: setLaunchAtLogin))
                             toggleRow("Значок в строке меню", $showMenuBar)
+                            toggleRow("Горячая клавиша ⌥⌘K", Binding(get: { globalHotkey }, set: { globalHotkey = $0; Hotkey.set(enabled: $0) }))
                             toggleRow("Уведомления о подписке", $notifications)
                         }
                         .appear(1)
@@ -68,6 +81,14 @@ struct SettingsView: View {
                         }
                         .appear(2)
                         #endif
+                        ListSection(footer: transferNote ?? "Серверы и ссылки подписок в файл не попадают: в них секреты.") {
+                            buttonRow("История подключений", "clock.arrow.circlepath") { showHistory = true }
+                            #if os(macOS)
+                            buttonRow("Экспорт настроек и маршрутов", "square.and.arrow.up") { exportSettings() }
+                            buttonRow("Импорт настроек и маршрутов", "square.and.arrow.down") { importSettings() }
+                            #endif
+                        }
+                        .appear(3)
                         ListSection(footer: "Статистика хранится только на этом устройстве.") {
                             buttonRow(statsCleared ? "Статистика сброшена" : "Сбросить статистику трафика", "trash") {
                                 TrafficStats.reset(); week = TrafficStats.last(7); statsCleared = true
@@ -96,6 +117,7 @@ struct SettingsView: View {
                 }
             }
             #if os(macOS)
+            .sheet(isPresented: $showHistory) { HistoryView() }
             .sheet(isPresented: $showDiagnostics) { DiagnosticsView(vpn: vpn, server: nil) }
             #endif
         }
@@ -117,6 +139,39 @@ struct SettingsView: View {
         if on && SMAppService.mainApp.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
     }
 
+    private static let prefKeys = ["autoConnect", "autoReconnect", "sounds", "showMenuBar", "notifications", "autoUpdateCheck", "globalHotkey"]
+
+    private func exportSettings() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "Kitsune-settings.json"
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        var prefs: [String: Bool] = [:]
+        for key in Self.prefKeys { if let value = UserDefaults.standard.object(forKey: key) as? Bool { prefs[key] = value } }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        do {
+            try encoder.encode(Backup(routing: library.routing, prefs: prefs)).write(to: url)
+            transferNote = "Настройки сохранены."
+        } catch { transferNote = "Не удалось сохранить файл." }
+    }
+
+    private func importSettings() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let data = try? Data(contentsOf: url), let backup = try? JSONDecoder().decode(Backup.self, from: data) else {
+            transferNote = "Это не файл настроек Kitsune."
+            return
+        }
+        library.routing = backup.routing
+        for (key, value) in backup.prefs where Self.prefKeys.contains(key) { UserDefaults.standard.set(value, forKey: key) }
+        Hotkey.set(enabled: UserDefaults.standard.object(forKey: "globalHotkey") as? Bool ?? true)
+        transferNote = "Настройки загружены. Маршруты применятся при следующем подключении."
+    }
+
+    private struct Backup: Codable { var routing: RoutingSettings; var prefs: [String: Bool] }
+
     private func setLanguage(_ code: String) {
         language = code
         if code == "system" { UserDefaults.standard.removeObject(forKey: "AppleLanguages") } else { UserDefaults.standard.set([code], forKey: "AppleLanguages") }
@@ -131,7 +186,6 @@ struct SettingsView: View {
     }
 
     private var updateFooter: LocalizedStringKey {
-        if Updater.feed == nil { return "Канал обновлений не настроен." }
         return switch updater.state {
         case .upToDate: "Установлена последняя версия."
         case .failed: "Не удалось проверить обновления."
@@ -143,6 +197,23 @@ struct SettingsView: View {
         if case .available(_, let url) = updater.state { NSWorkspace.shared.open(url) } else { Task { await updater.check() } }
     }
     #endif
+
+    @ViewBuilder private var leakRows: some View {
+        switch leak.state {
+        case .running: ListRow { ProgressView().controlSize(.small); Text("Проверяем…") }
+        case .failed: ListRow { Text("Не удалось проверить: нет сети?").foregroundStyle(.secondary) }
+        case .done(let r):
+            ListRow { Text("IP-адрес"); Spacer(); Text(r.ip).monospacedDigit().foregroundStyle(.secondary) }
+            ListRow { Text("Страна"); Spacer(); Text(Locale.current.localizedString(forRegionCode: r.country) ?? r.country).foregroundStyle(.secondary) }
+            ListRow { Text("DNS"); Spacer(); Text(r.dns ?? "—").foregroundStyle(.secondary).lineLimit(1) }
+        case .idle: EmptyView()
+        }
+    }
+
+    private var leakFooter: LocalizedStringKey {
+        if case .done(let r) = leak.state, vpn.status.isActive, r.country == "RU" { return "Сайты видят российский адрес: трафик идёт мимо VPN или сервер в России." }
+        return "Показывает, какой адрес и DNS видят сайты. При включённом VPN это должен быть адрес сервера."
+    }
 
     private func bytes(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, countStyle: .binary) }
 

@@ -21,6 +21,19 @@ struct KitsuneApp: App {
         RootView(vpn: vpn, library: library, tab: $tab)
             .tint(.white)
             // vless:// and similar links open Kitsune and add the server.
+            .onChange(of: vpn.status) { _, new in
+                if new == .connected { History.begin(server: library.selected?.displayName ?? "") }
+                else if new == .disconnected || new == .invalid { History.end(down: vpn.downTotal, up: vpn.upTotal) }
+                #if os(macOS)
+                DockBadge.update(connected: new == .connected)
+                #endif
+            }
+            #if os(macOS)
+            .task {
+                Hotkey.action = { Task { await vpn.toggle(library: library) } }
+                Hotkey.set(enabled: UserDefaults.standard.object(forKey: "globalHotkey") as? Bool ?? true)
+            }
+            #endif
             .onOpenURL { url in Task { try? await library.add(any: url.absoluteString) } }
             // White text and dark system chrome sit best on the fox-orange background.
             .preferredColorScheme(.dark)
@@ -169,7 +182,7 @@ struct RootView: View {
             case .home: HomeView(vpn: vpn, library: library, tab: $tab)
             case .servers: ServersView(library: library, tunnelUp: vpn.status == .connected)
             case .routing: RoutingView(library: library)
-            case .settings: SettingsView(vpn: vpn)
+            case .settings: SettingsView(vpn: vpn, library: library)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

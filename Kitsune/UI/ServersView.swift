@@ -9,6 +9,7 @@ struct ServersView: View {
     @State var adding = false
     @State private var editing: ServerConfig?
     @State var pinging = false
+    @AppStorage("serverSort") var sort = "default"
 
     var body: some View {
         NavigationStack {
@@ -68,6 +69,15 @@ extension ServersView {
         }
         .disabled(library.isEmpty || pinging)
         .symbolEffect(.pulse, isActive: pinging)
+        Menu("Сортировка", systemImage: "arrow.up.arrow.down") {
+            Picker("Сортировка", selection: $sort) {
+                Text("Как в подписке").tag("default")
+                Text("По пингу").tag("ping")
+                Text("По стране").tag("country")
+            }
+            .pickerStyle(.inline)
+        }
+        .menuIndicator(.hidden)
         Button("Добавить", systemImage: "plus") { adding = true }
     }
 }
@@ -259,22 +269,32 @@ private struct ServerRows: View {
     let library: Library
     let servers: [ServerConfig]
     var editing: Binding<ServerConfig?>?
+    @AppStorage("serverSort") private var sort = "default"
+
+    private var ordered: [ServerConfig] {
+        switch sort {
+        case "ping": servers.sorted { (library.pings[$0.id]?.milliseconds ?? .max) < (library.pings[$1.id]?.milliseconds ?? .max) }
+        case "country": servers.sorted { ($0.flag ?? "\u{10FFFF}", $0.displayName) < ($1.flag ?? "\u{10FFFF}", $1.displayName) }
+        default: servers
+        }
+    }
 
     var body: some View {
         // Lazy: a subscription can hold dozens of servers, and building every row at once made the tab stutter.
         LazyVStack(spacing: 0) {
-            ForEach(servers) { server in
+            ForEach(ordered) { server in
                 ServerRow(server: server, selected: library.selected?.id == server.id, ping: library.pings[server.id]) {
                     withAnimation(.smooth(duration: 0.25)) { library.selectedID = server.id }
                 }
                 .contextMenu {
                     Button("Проверить пинг", systemImage: "speedometer") { Task { await library.ping([server]) } }
+                    if let link = server.link { Button("Копировать ссылку", systemImage: "doc.on.doc") { Clipboard.copy(link) } }
                     if let editing {
                         Button("Изменить", systemImage: "pencil") { editing.wrappedValue = server }
                         Button("Удалить", systemImage: "trash", role: .destructive) { library.remove(server) }
                     }
                 }
-                if server.id != servers.last?.id { Divider().opacity(0.5).padding(.leading, 60) }
+                if server.id != ordered.last?.id { Divider().opacity(0.5).padding(.leading, 60) }
             }
         }
         .sensoryFeedback(.selection, trigger: library.selected?.id)

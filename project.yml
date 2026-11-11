@@ -13,7 +13,7 @@ settings:
     SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
     TARGETED_DEVICE_FAMILY: "1"
     CODE_SIGN_STYLE: Automatic
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "1.1.0"
     CURRENT_PROJECT_VERSION: "1"
 packages:
   Shared:
@@ -87,8 +87,6 @@ targets:
     info:
       path: Kitsune/macOS/Info.plist
       properties:
-        # JSON feed {"version","url","notes"} for the update check; empty hides the check.
-        KitsuneUpdateFeed: ""
         CFBundleURLTypes:
           - CFBundleURLName: com.kitsune.vpn
             CFBundleURLSchemes: [vless, hysteria2, hy2, trojan, vmess, ss, kitsune]
