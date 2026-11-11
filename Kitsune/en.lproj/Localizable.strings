@@ -260,3 +260,4 @@
 "Приложения — через свой сервер" = "Apps — via their own server";
 "Приложение всегда выходит через выбранный сервер, остальное через основной. Применяется при следующем подключении." = "The app always exits through the chosen server, everything else through the main one. Applies on the next connection.";
 "сервер удалён" = "server removed";
+"пик" = "peak";
