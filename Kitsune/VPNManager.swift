@@ -34,6 +34,7 @@ final class VPNManager {
     private(set) var upTotal: Int64 = 0
     /// Last ~40 seconds of download speed, for the sparkline.
     private(set) var downHistory: [Int64] = []
+    private(set) var upHistory: [Int64] = []
     /// Servers present in the running tunnel's config, i.e. measurable through it.
     private(set) var tunnelServerIDs: Set<String> = []
     private var manager: NETunnelProviderManager?
@@ -137,7 +138,7 @@ final class VPNManager {
     private func trafficLoop() async {
         while !Task.isCancelled {
             guard status == .connected else {
-                if !downHistory.isEmpty || downTotal != 0 || upTotal != 0 || downRate != 0 || upRate != 0 { downRate = 0; upRate = 0; downTotal = 0; upTotal = 0; downHistory = [] }
+                if !downHistory.isEmpty || downTotal != 0 || upTotal != 0 || downRate != 0 || upRate != 0 { downRate = 0; upRate = 0; downTotal = 0; upTotal = 0; downHistory = []; upHistory = [] }
                 try? await Task.sleep(for: .seconds(1))
                 continue
             }
@@ -151,7 +152,8 @@ final class VPNManager {
                     downTotal += t.down; upTotal += t.up
                     TrafficStats.record(down: t.down, up: t.up)
                     downHistory.append(t.down)
-                    if downHistory.count > 40 { downHistory.removeFirst() }
+                    upHistory.append(t.up)
+                    if downHistory.count > 60 { downHistory.removeFirst(); upHistory.removeFirst() }
                 }
             } catch {}
             try? await Task.sleep(for: .seconds(1))

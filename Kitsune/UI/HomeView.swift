@@ -1,3 +1,4 @@
+import Charts
 import NetworkExtension
 #if os(macOS)
 import AppKit
@@ -352,75 +353,109 @@ private struct ConnectionInfo: View {
 
 // MARK: - Live speed
 
-/// Down/up speed from the core plus what this session has moved. Numbers roll instead of jumping.
+/// Live speed: rolling down/up rates on top, a 60-second area chart below, session totals at the bottom.
 private struct SpeedRow: View {
     let vpn: VPNManager
+    private let down = Color(red: 1.0, green: 0.55, blue: 0.16)
+    private let up = Color.white
+
+    private struct Point: Identifiable { let id: Int; let down: Double; let up: Double }
+    private var points: [Point] {
+        let d = vpn.downHistory, u = vpn.upHistory
+        return d.indices.map { Point(id: 60 - d.count + $0, down: Double(d[$0]), up: Double(u.indices.contains($0) ? u[$0] : 0)) }
+    }
+    /// Average of the last 8 seconds: the placeholder wave returns when traffic calms down, and stays faintly behind real traffic.
+    private var recent: Int64 { (vpn.downHistory.suffix(8).reduce(0, +) + vpn.upHistory.suffix(8).reduce(0, +)) / 8 }
+    private var peak: Int64 { max(vpn.downHistory.max() ?? 0, vpn.upHistory.max() ?? 0) }
 
     var body: some View {
-        HStack(spacing: 0) {
-            stat("arrow.down", rate: vpn.downRate, total: vpn.downTotal)
-            Divider().frame(height: 28).overlay(.white.opacity(0.3))
-            stat("arrow.up", rate: vpn.upRate, total: vpn.upTotal)
+        VStack(spacing: 10) {
+            HStack(alignment: .top) {
+                rate("arrow.down", vpn.downRate, down)
+                Spacer()
+                VStack(spacing: 2) {
+                    Text("пик").font(.caption2).foregroundStyle(.secondary)
+                    Text(Self.rate(peak)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                }
+                Spacer()
+                rate("arrow.up", vpn.upRate, up)
+            }
+            ZStack {
+            IdleWave(strength: max(0.3, 1 - Double(recent) / 400_000)).frame(height: 70)
+            Chart(points) { p in
+                AreaMark(x: .value("t", p.id), y: .value("down", p.down), series: .value("s", "down"))
+                    .interpolationMethod(.catmullRom)
+                    .foregroundStyle(LinearGradient(colors: [down.opacity(0.55), down.opacity(0)], startPoint: .top, endPoint: .bottom))
+                LineMark(x: .value("t", p.id), y: .value("down", p.down), series: .value("s", "down"))
+                    .interpolationMethod(.catmullRom)
+                    .foregroundStyle(down)
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+                LineMark(x: .value("t", p.id), y: .value("up", p.up), series: .value("s", "up"))
+                    .interpolationMethod(.catmullRom)
+                    .foregroundStyle(up.opacity(0.7))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round))
+            }
+            .chartXScale(domain: 0...59)
+            .chartYScale(domain: 0...Double(max(peak, 100_000)) * 1.15) // calm line, not noise, when nothing moves
+            .chartXAxis(.hidden)
+            .chartYAxis(.hidden)
+            .frame(height: 70)
+            .animation(.smooth(duration: 0.6), value: vpn.downHistory)
+            }
+            HStack {
+                Text(L("за сессию ") + Self.bytes(vpn.downTotal)).foregroundStyle(down)
+                Spacer()
+                Text(L("за сессию ") + Self.bytes(vpn.upTotal)).foregroundStyle(.secondary)
+            }
+            .font(.caption.monospacedDigit())
+            .contentTransition(.numericText())
         }
-        .padding(.vertical, 12)
-        .background(alignment: .bottom) {
-            Sparkline(values: vpn.downHistory)
-                .frame(height: 38)
-                .opacity(0.5)
-                .clipShape(.rect(cornerRadius: 20))
-                .animation(.smooth(duration: 0.6), value: vpn.downHistory)
-        }
+        .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 20))
         .accessibilityElement(children: .combine)
     }
 
-    private func stat(_ icon: String, rate: Int64, total: Int64) -> some View {
-        VStack(spacing: 2) {
-            Label(Self.rate(rate), systemImage: icon)
-                .font(.headline.monospacedDigit())
-                .contentTransition(.numericText())
-            Text(L("за сессию ") + Self.bytes(total))
-                .font(.caption.monospacedDigit())
-                .opacity(0.8)
-                .contentTransition(.numericText())
-        }
-        .frame(maxWidth: .infinity)
-        .animation(.smooth(duration: 0.3), value: rate)
+    private func rate(_ icon: String, _ value: Int64, _ color: Color) -> some View {
+        Label(Self.rate(value), systemImage: icon)
+            .font(.headline.monospacedDigit())
+            .foregroundStyle(color)
+            .contentTransition(.numericText())
+            .animation(.smooth(duration: 0.3), value: value)
     }
 
     private static func bytes(_ value: Int64) -> String { ByteCountFormatter.string(fromByteCount: value, countStyle: .binary) }
     private static func rate(_ value: Int64) -> String { bytes(value) + L("/с") }
 }
 
-/// Download speed over the last seconds as a soft white area chart behind the speed numbers.
-private struct Sparkline: View {
-    let values: [Int64]
+/// Calm placeholder while the tunnel is quiet: two slow glowing waves that fade out as real traffic appears.
+private struct IdleWave: View {
+    let strength: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        GeometryReader { proxy in
-            let peak = Double(max(values.max() ?? 1, 50_000)) // flat line, not noise, when nothing moves
-            let step = proxy.size.width / CGFloat(max(values.count - 1, 1))
-            let points = values.enumerated().map { index, value in
-                CGPoint(x: CGFloat(index) * step, y: proxy.size.height * (1 - CGFloat(Double(value) / peak)))
-            }
-            ZStack {
-                Path { path in
-                    guard let first = points.first else { return }
-                    path.move(to: CGPoint(x: first.x, y: proxy.size.height))
-                    path.addLine(to: first)
-                    for point in points.dropFirst() { path.addLine(to: point) }
-                    path.addLine(to: CGPoint(x: points.last?.x ?? 0, y: proxy.size.height))
-                    path.closeSubpath()
+        TimelineView(.animation(minimumInterval: 1.0 / 20, paused: reduceMotion || strength < 0.02)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            Canvas { ctx, size in
+                for (index, color) in [Color(red: 1.0, green: 0.55, blue: 0.16), Color.white].enumerated() {
+                    var line = Path()
+                    let k = Double(index)
+                    for x in stride(from: 0.0, through: size.width, by: 3) {
+                        let u = x / size.width
+                        let envelope = sin(u * .pi) // calm at both ends
+                        let y = size.height * (0.62 - 0.2 * envelope * sin(u * (5 + k * 2) + t * (0.9 + k * 0.5) + k * 2) - 0.08 * envelope * sin(u * 11 - t * 0.7))
+                        if x == 0 { line.move(to: CGPoint(x: x, y: y)) } else { line.addLine(to: CGPoint(x: x, y: y)) }
+                    }
+                    var area = line
+                    area.addLine(to: CGPoint(x: size.width, y: size.height))
+                    area.addLine(to: CGPoint(x: 0, y: size.height))
+                    ctx.fill(area, with: .linearGradient(Gradient(colors: [color.opacity(k == 0 ? 0.28 : 0.1), .clear]),
+                                                         startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
+                    ctx.stroke(line, with: .color(color.opacity(k == 0 ? 0.8 : 0.35)), style: StrokeStyle(lineWidth: k == 0 ? 2 : 1.2, lineCap: .round))
                 }
-                .fill(LinearGradient(colors: [.white.opacity(0.5), .white.opacity(0)], startPoint: .top, endPoint: .bottom))
-                Path { path in
-                    guard let first = points.first else { return }
-                    path.move(to: first)
-                    for point in points.dropFirst() { path.addLine(to: point) }
-                }
-                .stroke(.white.opacity(0.8), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
             }
         }
+        .opacity(strength)
+        .animation(.smooth(duration: 0.8), value: strength)
         .accessibilityHidden(true)
     }
 }
