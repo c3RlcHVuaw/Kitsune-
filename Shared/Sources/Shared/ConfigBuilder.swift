@@ -21,7 +21,7 @@ public enum ConfigBuilder {
     ///   - bundledRuleSets: folder with `<tag>.srs` snapshots, used until the first successful download.
     ///   - controller: enables the local control API.
     public static func build(_ server: ServerConfig, servers: [ServerConfig] = [], routing: RoutingSettings = RoutingSettings(),
-                             bundledRuleSets: String? = nil, controller: Controller? = nil, share: LANShare? = nil) throws -> String {
+                             bundledRuleSets: String? = nil, controller: Controller? = nil, share: LANShare? = nil, findProcess: Bool = false) throws -> String {
         var routeRules: [[String: Any]] = [
             ["action": "sniff"],
             ["protocol": "dns", "action": "hijack-dns"],
@@ -69,6 +69,17 @@ public enum ConfigBuilder {
             }
         }
 
+        if routing.blockAds {
+            var ads: [String: Any] = [
+                "type": "remote", "tag": RuleSources.adsSet.0, "format": "binary",
+                "url": "\(RuleSources.base)/\(RuleSources.adsSet.1)",
+                "http_client": ["detour": "proxy"], "update_interval": "24h",
+            ]
+            if let bundledRuleSets { ads["initial_path"] = "\(bundledRuleSets)/\(RuleSources.adsSet.0).srs" }
+            ruleSets.append(ads)
+            routeRules.insert(["rule_set": [RuleSources.adsSet.0], "action": "reject"], at: 2) // before every direct/proxy rule
+        }
+
         var route: [String: Any] = [
             "rules": routeRules,
             "final": "proxy",
@@ -78,11 +89,12 @@ public enum ConfigBuilder {
         ]
         if !ruleSets.isEmpty { route["rule_set"] = ruleSets }
         // process_name rules need the core to look up which process owns each connection.
+        if findProcess { route["find_process"] = true } // lets the app list which program uses the traffic
         if routing.usesUserLists, !(routing.directApps + routing.proxyApps).isEmpty || !routing.appServers.isEmpty { route["find_process"] = true }
 
         var dns: [String: Any] = [
             "servers": [
-                ["type": "https", "tag": "remote", "server": "1.1.1.1", "detour": "proxy"],
+                ["type": "https", "tag": "remote", "server": routing.dns.address, "detour": "proxy"],
                 // No detour: DNS servers without one dial directly, bound to the physical interface.
                 ["type": "udp", "tag": "russia", "server": RuleSources.russianDNS],
             ],

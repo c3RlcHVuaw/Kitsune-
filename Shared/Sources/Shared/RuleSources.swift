@@ -9,6 +9,8 @@ public enum RuleSources {
         ("geosite-category-gov-ru", "rule-set-geosite/geosite-category-gov-ru.srs"),
         ("geosite-ru-available-only-inside", "rule-set-geosite/geosite-ru-available-only-inside.srs"),
     ]
+    /// Ads and trackers, used only when "block ads" is on.
+    static let adsSet = ("geosite-category-ads-all", "rule-set-geosite/geosite-category-ads-all.srs")
     static let ipSets = [("geoip-ru", "rule-set-geoip/geoip-ru.srs")]
 
     /// Whole Russian TLDs: .ru, .рф (punycode), .su.

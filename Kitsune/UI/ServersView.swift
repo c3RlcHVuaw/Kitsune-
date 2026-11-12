@@ -16,6 +16,29 @@ struct ServersView: View {
     @State var pinging = false
     @AppStorage("serverSort") var sort = "default"
 
+    /// The last servers you actually used, one tap away.
+    private var recentRow: some View {
+        let servers = library.recent.compactMap { id in library.allServers.first { $0.id == id } }
+        return ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                Text("Недавно").font(.footnote).foregroundStyle(.secondary)
+                ForEach(servers) { server in
+                    Button { withAnimation(.smooth) { library.selectedID = server.id } } label: {
+                        HStack(spacing: 5) {
+                            Text(server.flag ?? "🌐")
+                            Text(server.displayName).lineLimit(1)
+                        }
+                        .font(.footnote.weight(.medium))
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(.white.opacity(library.selected?.id == server.id ? 0.16 : 0.08), in: .capsule)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
+    }
+
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
@@ -48,6 +71,7 @@ struct ServersView: View {
                         Group {
                             LazyVStack(spacing: 22) {
                                 if library.allServers.count > 12 { searchField }
+                                if library.allServers.count > 12, query.isEmpty, !library.recent.isEmpty { recentRow }
                                 ForEach(Array(library.subscriptions.enumerated()), id: \.element.id) { index, subscription in
                                     SubscriptionCard(library: library, subscription: subscription).appear(index)
                                 }
@@ -330,21 +354,26 @@ private struct ServerRows: View {
 
     private var ordered: [ServerConfig] {
         let servers = query.isEmpty ? servers : servers.filter { $0.displayName.localizedCaseInsensitiveContains(query) || $0.summary.localizedCaseInsensitiveContains(query) }
-        return switch sort {
+        let sorted: [ServerConfig] = switch sort {
         case "ping": servers.sorted { (library.pings[$0.id]?.milliseconds ?? .max) < (library.pings[$1.id]?.milliseconds ?? .max) }
         case "country": servers.sorted { ($0.flag ?? "\u{10FFFF}", $0.displayName) < ($1.flag ?? "\u{10FFFF}", $1.displayName) }
         default: servers
         }
+        // Pinned first; the sort is stable, so the chosen order holds inside both groups.
+        return sorted.filter { library.pinned.contains($0.id) } + sorted.filter { !library.pinned.contains($0.id) }
     }
 
     var body: some View {
         // Lazy: a subscription can hold dozens of servers, and building every row at once made the tab stutter.
         LazyVStack(spacing: 0) {
             ForEach(ordered) { server in
-                ServerRow(server: server, selected: library.selected?.id == server.id, ping: library.pings[server.id], history: library.pingHistory[server.id] ?? []) {
+                ServerRow(server: server, selected: library.selected?.id == server.id, pinned: library.pinned.contains(server.id), ping: library.pings[server.id], history: library.pingHistory[server.id] ?? []) {
                     withAnimation(.smooth(duration: 0.25)) { library.selectedID = server.id }
                 }
                 .contextMenu {
+                    Button(library.pinned.contains(server.id) ? L("Открепить") : L("Закрепить"), systemImage: library.pinned.contains(server.id) ? "pin.slash" : "pin") {
+                        withAnimation(.smooth) { if library.pinned.contains(server.id) { library.pinned.remove(server.id) } else { library.pinned.insert(server.id) } }
+                    }
                     Button("Проверить пинг", systemImage: "speedometer") { Task { await library.ping([server]) } }
                     Button("Пинг по часам", systemImage: "chart.bar.xaxis") { heat = server }
                     if let link = server.link { Button("Копировать ссылку", systemImage: "doc.on.doc") { Clipboard.copy(link) } }
@@ -364,6 +393,7 @@ private struct ServerRows: View {
 private struct ServerRow: View {
     let server: ServerConfig
     let selected: Bool
+    var pinned = false
     let ping: Ping?
     var history: [Int] = []
     var onSelect: () -> Void
@@ -402,7 +432,10 @@ private struct ServerRow: View {
                 .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.2)) { flipped.toggle() } }
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(server.displayName).font(.body).lineLimit(1)
+                    HStack(spacing: 5) {
+                        Text(server.displayName).font(.body).lineLimit(1)
+                        if pinned { Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.secondary) }
+                    }
                     Text(server.summary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer(minLength: 8)
@@ -415,6 +448,9 @@ private struct ServerRow: View {
                     .scaleEffect(selected ? 1 : 0.6)
             }
             .opacity(flipped ? 0 : 1)
+            }
+            .overlay(alignment: .leading) {
+                Capsule().fill(CountryColor.of(server.countryCode)).frame(width: 3, height: 26).offset(x: -10).opacity(0.85)
             }
             .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
             .padding(.horizontal, 16)

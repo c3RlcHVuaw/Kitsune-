@@ -7,7 +7,8 @@ BASE=https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/relea
 DIR=PacketTunnel/RuleSets
 mkdir -p "$DIR"
 for item in rule-set-geosite/geosite-category-ru rule-set-geosite/geosite-category-gov-ru \
-            rule-set-geosite/geosite-ru-available-only-inside rule-set-geoip/geoip-ru; do
+            rule-set-geosite/geosite-ru-available-only-inside rule-set-geoip/geoip-ru \
+            rule-set-geosite/geosite-category-ads-all; do
   tag=$(basename "$item")
   curl -fsSL --retry 3 -o "$DIR/$tag.srs.tmp" "$BASE/$item.srs"
   # A truncated or HTML error page must not replace a good snapshot.

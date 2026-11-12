@@ -46,7 +46,15 @@ final class Library {
     private(set) var pings: [String: Ping] = [:]
     /// Last measurements per server (milliseconds, oldest first), for the mini graph.
     private(set) var pingHistory: [String: [Int]] = [:]
-    var selectedID: String? { didSet { UserDefaults.standard.set(selectedID, forKey: "selectedServer") } }
+    /// Servers the user pinned to the top of every list. Not secret, so plain defaults.
+    var pinned: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "pinnedServers") ?? []) {
+        didSet { UserDefaults.standard.set(Array(pinned), forKey: "pinnedServers") }
+    }
+    /// The last servers actually connected, newest first.
+    private(set) var recent: [String] = UserDefaults.standard.stringArray(forKey: "recentServers") ?? []
+    /// True while the active server answers much slower than it did a few minutes ago.
+    var slowAlert = false
+    var selectedID: String? { didSet { UserDefaults.standard.set(selectedID, forKey: "selectedServer"); slowAlert = false } }
     var routing: RoutingSettings { didSet { saveRouting() } }
     /// Set by the root view; used to measure through the running tunnel.
     weak var vpn: VPNManager?
@@ -236,6 +244,44 @@ final class Library {
         }
     }
 
+    func markRecent(_ id: String) {
+        recent = Array(([id] + recent.filter { $0 != id }).prefix(3))
+        UserDefaults.standard.set(recent, forKey: "recentServers")
+    }
+
+    /// Another server to move to when this one is slow: the best measured one, otherwise simply the next in the list.
+    func alternative(to current: ServerConfig) -> ServerConfig? {
+        let others = allServers.filter { $0.id != current.id }
+        return others.compactMap { s in pings[s.id]?.milliseconds.map { (s, $0) } }.min { $0.1 < $1.1 }?.0
+            ?? allServers.firstIndex(where: { $0.id == current.id }).flatMap { allServers.isEmpty ? nil : allServers[($0 + 1) % allServers.count] }
+    }
+
+    /// Slow = the last three samples are more than twice the earlier typical value and above half a second.
+    private func checkSlow(_ id: String) {
+        guard let samples = pingHistory[id], samples.count >= 8 else { return }
+        let earlier = samples.dropLast(3).sorted()
+        let baseline = earlier[earlier.count / 2]
+        let recentAverage = samples.suffix(3).reduce(0, +) / 3
+        if recentAverage > baseline * 2, recentAverage > 500 {
+            if !slowAlert { slowAlert = true; Task { await Self.notifySlow() } }
+        } else if recentAverage < baseline * 3 / 2 {
+            slowAlert = false
+        }
+    }
+
+    private static func notifySlow() async {
+        guard UserDefaults.standard.object(forKey: "notifications") as? Bool ?? true else { return }
+        let key = "notified-slow"
+        guard Date.now.timeIntervalSince1970 - UserDefaults.standard.double(forKey: key) > 1800 else { return }
+        let center = UNUserNotificationCenter.current()
+        guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return }
+        let content = UNMutableNotificationContent()
+        content.title = L("Сервер тормозит")
+        content.body = L("Откройте Kitsune и смените сервер.")
+        try? await center.add(UNNotificationRequest(identifier: key, content: content, trigger: nil))
+        UserDefaults.standard.set(Date.now.timeIntervalSince1970, forKey: key)
+    }
+
     private func record(_ id: String, _ ms: Int) {
         pingHistory[id] = Array((pingHistory[id] ?? []).suffix(23) + [ms])
         PingStats.record(id, ms)
@@ -250,7 +296,7 @@ final class Library {
         let ok = (try? await URLSession.shared.data(for: request)) != nil
         let elapsed = start.duration(to: .now).components
         let ms = Int(elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000)
-        if ok { pings[id] = .tunnel(ms); record(id, ms) } else { pings[id] = .failed }
+        if ok { pings[id] = .tunnel(ms); record(id, ms); checkSlow(id) } else { pings[id] = .failed }
     }
 
     /// Picks the server with the lowest ping among those measured.

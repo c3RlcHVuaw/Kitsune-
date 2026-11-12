@@ -35,6 +35,10 @@ final class VPNManager {
     /// Last ~40 seconds of download speed, for the sparkline.
     private(set) var downHistory: [Int64] = []
     private(set) var upHistory: [Int64] = []
+    /// Programs using the most traffic right now (bytes/s), macOS only: the core must look up the owner of each connection.
+    private(set) var topApps: [(name: String, rate: Int64)] = []
+    /// A short plain-language note, e.g. after the tunnel recovered by itself. Clears after a few seconds.
+    private(set) var notice: String?
     /// Servers present in the running tunnel's config, i.e. measurable through it.
     private(set) var tunnelServerIDs: Set<String> = []
     private var manager: NETunnelProviderManager?
@@ -48,6 +52,7 @@ final class VPNManager {
 
     init() {
         Task { await trafficLoop() }
+        Task { await appsLoop() }
         #if !os(macOS)
         Task { await load() }
         Task {
@@ -160,6 +165,50 @@ final class VPNManager {
         }
     }
 
+    private struct Connections: Decodable {
+        struct Item: Decodable {
+            struct Meta: Decodable { let processPath: String? }
+            let id: String; let upload: Int64; let download: Int64; let metadata: Meta?
+        }
+        let connections: [Item]?
+    }
+
+    /// Every two seconds: which program moved how many bytes, from the core's /connections list.
+    private func appsLoop() async {
+        var last: [String: Int64] = [:]
+        var lastTime = Date.now
+        var primed = false
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(2))
+            guard status == .connected else {
+                if !topApps.isEmpty { topApps = [] }
+                last = [:]; primed = false
+                continue
+            }
+            var request = URLRequest(url: URL(string: "http://127.0.0.1:\(Self.controller.port)/connections")!, timeoutInterval: 3)
+            request.setValue("Bearer \(Self.controller.secret)", forHTTPHeaderField: "Authorization")
+            guard let (data, _) = try? await URLSession.shared.data(for: request),
+                  let list = try? JSONDecoder().decode(Connections.self, from: data) else { continue }
+            let now = Date.now
+            let seconds = max(now.timeIntervalSince(lastTime), 0.5)
+            lastTime = now
+            var perApp: [String: Int64] = [:]
+            var current: [String: Int64] = [:]
+            for item in list.connections ?? [] {
+                let total = item.upload + item.download
+                current[item.id] = total
+                guard primed, let path = item.metadata?.processPath, !path.isEmpty else { continue }
+                perApp[URL(filePath: path).lastPathComponent, default: 0] += max(total - (last[item.id] ?? 0), 0)
+            }
+            last = current
+            let wasPrimed = primed
+            primed = true
+            guard wasPrimed else { continue }
+            topApps = perApp.map { (name: $0.key, rate: Int64(Double($0.value) / seconds)) }
+                .filter { $0.rate > 1024 }.sorted { $0.rate > $1.rate }.prefix(3).map { $0 }
+        }
+    }
+
     func disconnect() {
         #if os(macOS)
         status = .disconnecting
@@ -209,7 +258,12 @@ final class VPNManager {
         #else
         let share: LANShare? = nil
         #endif
-        return try ConfigBuilder.build(server, servers: servers, routing: routing, bundledRuleSets: bundledRuleSets, controller: controller, share: share)
+        #if os(macOS)
+        let findProcess = true
+        #else
+        let findProcess = false
+        #endif
+        return try ConfigBuilder.build(server, servers: servers, routing: routing, bundledRuleSets: bundledRuleSets, controller: controller, share: share, findProcess: findProcess)
     }
 
     /// Local control API of sing-box inside the extension. The secret persists so the API keeps working after an app relaunch.
@@ -479,6 +533,10 @@ extension VPNManager {
         status = .disconnected
         await connectDirect(last.server, servers: last.servers, routing: last.routing)
         if status == .disconnected, lastError == nil { lastError = reason }
+        else if status != .disconnected {
+            notice = L("Соединение прервалось, туннель восстановлен")
+            Task { try? await Task.sleep(for: .seconds(8)); notice = nil }
+        }
     }
 
     private static func coreError(_ log: URL) -> String? {

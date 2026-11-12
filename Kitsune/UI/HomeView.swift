@@ -19,7 +19,12 @@ struct HomeView: View {
 
     @AppStorage("buttonTheme") private var themeRaw = "copper"
     @AppStorage("winterMode") private var winterMode = true
+    @AppStorage("minimal") private var minimal = false
+    @AppStorage("countryTint") private var countryTint = true
+    @State private var celebrate = 0
     @State private var check = ConnectionCheck()
+    @State private var greeting: String?
+    @State private var nod = 0
     @State private var taps = 0
     @State private var flip = 0
 
@@ -28,12 +33,18 @@ struct HomeView: View {
 
     /// Ring colour follows the real latency through the tunnel: theme colour is fine, amber so-so, red bad.
     private var ringColor: Color {
-        guard vpn.status == .connected, let server, let ping = library.pings[server.id] else { return theme.accent }
+        guard vpn.status == .connected, let server, let ping = library.pings[server.id] else { return tinted(theme.accent) }
         switch ping {
-        case .tunnel(let ms): return ms < 600 ? theme.accent : ms < 1500 ? Color(red: 1.0, green: 0.80, blue: 0.25) : Color(red: 0.92, green: 0.22, blue: 0.22)
+        case .tunnel(let ms): return ms < 600 ? tinted(theme.accent) : ms < 1500 ? Color(red: 1.0, green: 0.80, blue: 0.25) : Color(red: 0.92, green: 0.22, blue: 0.22)
         case .failed: return Color(red: 0.92, green: 0.22, blue: 0.22)
-        default: return theme.accent
+        default: return tinted(theme.accent)
         }
+    }
+
+    /// The ring picks up a little of the exit country's colour.
+    private func tinted(_ base: Color) -> Color {
+        guard countryTint, vpn.status == .connected, let code = server?.countryCode else { return base }
+        return base.mix(with: CountryColor.of(code), by: 0.25)
     }
     private var hasError: Bool { vpn.lastError != nil && !vpn.status.isActive }
 
@@ -50,8 +61,10 @@ struct HomeView: View {
                         .opacity(0.8)
                 }
                 #endif
-                Text("kitsune")
+                Text(verbatim: greeting ?? "kitsune")
                     .font(.display(15, relativeTo: .headline))
+                    .id(greeting)
+                    .transition(.blurReplace)
                     .onTapGesture { taps += 1; if taps % 7 == 0 { flip += 1 } }
                     .accessibilityAddTraits(.isHeader)
                 }
@@ -60,17 +73,37 @@ struct HomeView: View {
                 ClipboardOffer(library: library).padding(.top, 10)
                 #endif
                 Spacer(minLength: 16)
-                ConnectButton(status: vpn.status, theme: theme, ring: ringColor, season: winterMode ? Season.current : nil, error: hasError, action: toggle, flip: flip)
+                ConnectButton(status: vpn.status, theme: theme, ring: ringColor, season: winterMode ? Season.current : nil, error: hasError, action: toggle, flip: flip, nod: nod, celebrate: celebrate)
                 StatusCaption(status: vpn.status, hasError: hasError, server: server, connectedDate: vpn.connectedDate) {
                     tab = .servers
                 }
                 .padding(.top, 28)
-                if vpn.status == .connected, !hasError {
+                if vpn.status == .connected, !hasError, !minimal {
                     VStack(spacing: 8) {
                         CheckChip(state: check.state)
                         LiveLine(vpn: vpn, library: library, server: server)
                     }
                     .padding(.top, 6)
+                }
+                if vpn.status == .connected, !hasError {
+                    VStack(spacing: 8) {
+                        if let notice = vpn.notice {
+                            Label(notice, systemImage: "arrow.triangle.2.circlepath").font(.footnote.weight(.medium))
+                                .foregroundStyle(Color(red: 0.45, green: 0.90, blue: 0.55)).transition(.blurReplace)
+                        }
+                        if library.slowAlert {
+                            Button(action: switchFromSlow) {
+                                Label("Сервер тормозит · Сменить", systemImage: "tortoise.fill").font(.footnote.weight(.medium))
+                                    .padding(.horizontal, 12).padding(.vertical, 7)
+                                    .background(Color(red: 1.0, green: 0.78, blue: 0.30).opacity(0.18), in: .capsule)
+                                    .foregroundStyle(Color(red: 1.0, green: 0.78, blue: 0.30))
+                            }
+                            .buttonStyle(.plain).transition(.blurReplace)
+                        }
+                    }
+                    .padding(.top, 8)
+                    .animation(.smooth, value: library.slowAlert)
+                    .animation(.smooth, value: vpn.notice)
                 }
                 Group {
                     if let error = vpn.lastError, hasError {
@@ -81,11 +114,12 @@ struct HomeView: View {
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
                             .glassEffect(.regular, in: .rect(cornerRadius: 18))
-                    } else if vpn.status == .connected, let server {
+                    } else if vpn.status == .connected, !minimal, let server {
                         GlassEffectContainer(spacing: 12) {
                             VStack(spacing: 12) {
                                 ConnectionInfo(server: server).appear(0)
                                 SpeedRow(vpn: vpn, accent: theme.accent).appear(1)
+                                TopApps(apps: vpn.topApps)
                             }
                         }
                     }
@@ -101,6 +135,35 @@ struct HomeView: View {
         }
         .animation(.smooth, value: vpn.status)
         .animation(.smooth, value: hasError)
+        .animation(.smooth, value: minimal)
+        .animation(.smooth, value: greeting)
+        .task(id: vpn.connectedDate) {
+            // Sparks and a line of text at one hour, one day and one week in a single connection.
+            guard let start = vpn.connectedDate else { return }
+            let marks: [(TimeInterval, String)] = [(3600, L("Час под защитой")), (86_400, L("Сутки под защитой")), (604_800, L("Неделя под защитой"))]
+            var fired = marks.filter { Date.now.timeIntervalSince(start) >= $0.0 }.count
+            while !Task.isCancelled, fired < marks.count {
+                try? await Task.sleep(for: .seconds(20))
+                let elapsed = Date.now.timeIntervalSince(start)
+                guard let index = marks.lastIndex(where: { elapsed >= $0.0 }), index >= fired else { continue }
+                fired = index + 1
+                celebrate += 1
+                greeting = marks[index].1
+                try? await Task.sleep(for: .seconds(4))
+                greeting = nil
+            }
+        }
+        .task {
+            // First time the app opens today: the fox nods and the title says good morning for a moment.
+            let today = Date.now.formatted(.iso8601.year().month().day())
+            guard UserDefaults.standard.string(forKey: "lastGreetDay") != today else { return }
+            UserDefaults.standard.set(today, forKey: "lastGreetDay")
+            let hour = Calendar.current.component(.hour, from: .now)
+            greeting = hour < 5 ? L("Доброй ночи") : hour < 12 ? L("Доброе утро") : hour < 18 ? L("Добрый день") : L("Добрый вечер")
+            nod += 1
+            try? await Task.sleep(for: .seconds(3))
+            greeting = nil
+        }
         .sensoryFeedback(trigger: vpn.status) { _, new in
             switch new {
             case .connected: .success
@@ -132,6 +195,13 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showDiagnostics) { DiagnosticsView(vpn: vpn, server: server?.displayName) }
         #endif
+    }
+
+    /// Moves the live tunnel to another server without reconnecting.
+    private func switchFromSlow() {
+        guard let current = server, let other = library.alternative(to: current) else { return }
+        library.selectedID = other.id
+        vpn.reload(other, servers: library.allServers, routing: library.routing)
     }
 
     private func toggle() {
@@ -176,7 +246,13 @@ private struct ConnectButton: View {
     @State private var dizzy = false
     /// Bumped by the home screen when the wordmark is tapped seven times.
     var flip = 0
+    var nod = 0
+    var celebrate = 0
+    @State private var asleep = false
+    @State private var wake = 0
+    @State private var nodOffset: CGFloat = 0
 
+    private var sleeping: Bool { asleep && !connected && !busy && !error }
     private var copper: Color { theme.accent }
     private var busy: Bool { status == .connecting || status == .disconnecting || status == .reasserting }
     private var connected: Bool { status == .connected }
@@ -206,12 +282,19 @@ private struct ConnectButton: View {
                     .shadow(color: .black.opacity(0.5), radius: 18, y: 10)
                     .glassEffect(connected ? .regular.tint(copper.opacity(0.45)) : .regular, in: .circle)
                     .animation(.smooth(duration: 0.8), value: status)
-                FoxMark(color: connected ? .white : theme.soft, droop: error ? 1 : 0, sway: sway, twitch: twitch)
+                FoxMark(color: connected ? .white : theme.soft, droop: error ? 1 : (sleeping ? 0.35 : 0), sway: sway, twitch: twitch)
                     .animation(.smooth(duration: 0.5), value: error)
+                    .overlay {
+                        if sleeping {
+                            FoxSleepEyes().stroke(.black.opacity(0.6), style: StrokeStyle(lineWidth: 2.4, lineCap: .round)).offset(y: 4)
+                            SleepZ().offset(x: 30, y: -34)
+                        }
+                    }
+                    .animation(.smooth(duration: 0.8), value: sleeping)
                     .overlay { FoxEyes().stroke(.black.opacity(0.7), style: StrokeStyle(lineWidth: 2.6, lineCap: .round, lineJoin: .round)).opacity(dizzy ? 1 : 0).offset(y: 4) }
                     .rotation3DEffect(.degrees(flipAngle), axis: (x: 0, y: 1, z: 0))
                     .frame(width: 88)
-                    .offset(y: 4)
+                    .offset(y: 4 + nodOffset)
                     .phaseAnimator([false, true], trigger: connected) { view, phase in
                         view.offset(y: phase && connected && !reduceMotion ? -8 : 0)
                     } animation: { _ in .spring(duration: 0.35, bounce: 0.5) }
@@ -248,6 +331,23 @@ private struct ConnectButton: View {
             withAnimation(.easeIn(duration: 0.15)) { dizzy = true }
             Task { try? await Task.sleep(for: .seconds(1.8)); withAnimation(.easeOut(duration: 0.4)) { dizzy = false } }
         }
+        .onHover { _ in asleep = false; wake += 1 }
+        .task(id: "\(connected)\(busy)\(error)\(wake)") {
+            // After a quiet minute and a half without a connection the fox dozes off; a touch wakes it.
+            guard !connected, !busy, !error, !reduceMotion else { asleep = false; return }
+            try? await Task.sleep(for: .seconds(90))
+            if !Task.isCancelled { asleep = true }
+        }
+        .onChange(of: celebrate) { burst = .now }
+        .onChange(of: nod) {
+            guard !reduceMotion else { return }
+            Task {
+                for value in [7, 0, 5, 0] as [CGFloat] {
+                    withAnimation(.easeInOut(duration: 0.16)) { nodOffset = value }
+                    try? await Task.sleep(for: .milliseconds(170))
+                }
+            }
+        }
         .onChange(of: flip) {
             guard !reduceMotion else { return }
             withAnimation(.spring(duration: 0.9, bounce: 0.25)) { flipAngle = 360 }
@@ -283,6 +383,45 @@ private struct FoxEyes: Shape {
         return Path { p in
             p.move(to: pt(0.27, 0.40)); p.addLine(to: pt(0.37, 0.45)); p.addLine(to: pt(0.27, 0.50))
             p.move(to: pt(0.73, 0.40)); p.addLine(to: pt(0.63, 0.45)); p.addLine(to: pt(0.73, 0.50))
+        }
+    }
+}
+
+/// Closed eyes: two small arcs.
+private struct FoxSleepEyes: Shape {
+    func path(in r: CGRect) -> Path {
+        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: r.minX + r.width * x, y: r.minY + r.height * y) }
+        return Path { p in
+            p.move(to: pt(0.26, 0.44)); p.addQuadCurve(to: pt(0.38, 0.44), control: pt(0.32, 0.50))
+            p.move(to: pt(0.62, 0.44)); p.addQuadCurve(to: pt(0.74, 0.44), control: pt(0.68, 0.50))
+        }
+    }
+}
+
+/// A slow drifting "z".
+private struct SleepZ: View {
+    var body: some View {
+        Text(verbatim: "z").font(.system(.title3, design: .rounded).weight(.bold)).foregroundStyle(.white.opacity(0.7))
+            .phaseAnimator([false, true]) { view, up in view.offset(x: up ? 6 : 0, y: up ? -12 : 0).opacity(up ? 0 : 1) } animation: { _ in .easeOut(duration: 1.8) }
+    }
+}
+
+/// The three programs moving the most data right now.
+private struct TopApps: View {
+    let apps: [(name: String, rate: Int64)]
+
+    var body: some View {
+        if !apps.isEmpty {
+            HStack(spacing: 8) {
+                ForEach(apps, id: \.name) { app in
+                    Text("\(app.name) · \(ByteCountFormatter.string(fromByteCount: app.rate, countStyle: .binary))" + L("/с"))
+                        .font(.caption.monospacedDigit()).lineLimit(1)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(.white.opacity(0.08), in: .capsule)
+                }
+            }
+            .transition(.opacity)
+            .animation(.smooth, value: apps.map(\.name))
         }
     }
 }

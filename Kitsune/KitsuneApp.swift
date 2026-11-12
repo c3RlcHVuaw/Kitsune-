@@ -30,6 +30,7 @@ struct KitsuneApp: App {
             .modifier(WhatsNewModifier())
             // vless:// and similar links open Kitsune and add the server.
             .onChange(of: vpn.status) { _, new in
+                if new == .connected, let id = library.selected?.id { library.markRecent(id) }
                 if new == .connected { History.begin(server: library.selected?.displayName ?? "", country: library.selected?.countryCode) }
                 else if new == .disconnected || new == .invalid { History.end(down: vpn.downTotal, up: vpn.upTotal) }
                 #if os(macOS)

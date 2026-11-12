@@ -12,7 +12,28 @@ public struct RoutingSettings: Codable, Equatable, Sendable {
         case custom
     }
 
+    /// Resolver for everything that goes through the tunnel.
+    public enum DNSProvider: String, Codable, CaseIterable, Sendable {
+        case cloudflare, google, quad9, adguard
+
+        public var address: String {
+            switch self {
+            case .cloudflare: "1.1.1.1"
+            case .google: "8.8.8.8"
+            case .quad9: "9.9.9.9"
+            case .adguard: "94.140.14.14"
+            }
+        }
+
+        public var title: String {
+            switch self { case .cloudflare: "Cloudflare"; case .google: "Google"; case .quad9: "Quad9"; case .adguard: "AdGuard" }
+        }
+    }
+
     public var profile: Profile
+    public var dns: DNSProvider
+    /// Drops connections to known ad and tracker domains.
+    public var blockAds: Bool
     /// "Always direct" entries: domains (`example.com`, `*.example.com`) or IPs/CIDRs.
     public var direct: [String]
     /// "Always through VPN" entries, same format.
@@ -26,7 +47,10 @@ public struct RoutingSettings: Codable, Equatable, Sendable {
     public var appServers: [String: String]
 
     public init(profile: Profile = .russiaDirect, direct: [String] = [], proxy: [String] = [], presets: Set<RoutePreset> = [],
-                directApps: [String] = [], proxyApps: [String] = [], appServers: [String: String] = [:]) {
+                directApps: [String] = [], proxyApps: [String] = [], appServers: [String: String] = [:],
+                dns: DNSProvider = .cloudflare, blockAds: Bool = false) {
+        self.dns = dns
+        self.blockAds = blockAds
         self.profile = profile
         self.direct = direct
         self.proxy = proxy
@@ -40,6 +64,8 @@ public struct RoutingSettings: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         profile = try c.decode(Profile.self, forKey: .profile)
+        dns = try c.decodeIfPresent(DNSProvider.self, forKey: .dns) ?? .cloudflare
+        blockAds = try c.decodeIfPresent(Bool.self, forKey: .blockAds) ?? false
         direct = try c.decode([String].self, forKey: .direct)
         proxy = try c.decode([String].self, forKey: .proxy)
         presets = try c.decodeIfPresent(Set<RoutePreset>.self, forKey: .presets) ?? []

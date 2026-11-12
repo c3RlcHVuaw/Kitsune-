@@ -13,6 +13,7 @@ struct RoutingView: View {
                 ScrollView {
                     VStack(spacing: 22) {
                         profilePicker.appear(0)
+                        ProtectionSection(dns: binding(\.dns), blockAds: binding(\.blockAds)).appear(1)
                         if library.routing.profile == .russiaDirect { RussianListsSection().appear(1) }
                         if library.routing.usesUserLists {
                             PresetsSection(presets: binding(\.presets)).appear(2)
@@ -54,6 +55,30 @@ struct RoutingView: View {
 }
 
 private let accent = Color(red: 1.0, green: 0.50, blue: 0.10)
+
+/// Resolver for tunnelled traffic and ad blocking.
+private struct ProtectionSection: View {
+    @Binding var dns: RoutingSettings.DNSProvider
+    @Binding var blockAds: Bool
+
+    var body: some View {
+        ListSection(title: "DNS и реклама", footer: "Применяется при следующем подключении. Список рекламы обновляется раз в сутки.") {
+            ListRow {
+                Text("DNS через VPN")
+                Spacer()
+                Picker("DNS через VPN", selection: $dns) {
+                    ForEach(RoutingSettings.DNSProvider.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .labelsHidden().pickerStyle(.menu).fixedSize()
+            }
+            ListRow {
+                Text("Блокировать рекламу и трекеры")
+                Spacer()
+                Toggle("", isOn: $blockAds).labelsHidden().toggleStyle(.switch).tint(accent)
+            }
+        }
+    }
+}
 
 private struct RussianListsSection: View {
     private let lists = [

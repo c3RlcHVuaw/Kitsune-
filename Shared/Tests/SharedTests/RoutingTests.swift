@@ -137,3 +137,23 @@ private func routeOutbounds(_ routing: RoutingSettings) throws -> [String] {
     #expect(lan["listen_port"] as? Int == 7890)
     #expect((lan["users"] as? [[String: String]])?.first?["password"] == "correct-horse-battery")
 }
+
+@Test func dnsChoiceAndAdBlockShapeTheConfig() throws {
+    let server = try ProxyLink.parse("vless://11111111-1111-1111-1111-111111111111@example.com:443?security=reality&pbk=abc&sni=a.com&fp=chrome&type=tcp#t")
+    func parse(_ routing: RoutingSettings, find: Bool = false) throws -> [String: Any] {
+        try #require(JSONSerialization.jsonObject(with: Data(ConfigBuilder.build(server, routing: routing, findProcess: find).utf8)) as? [String: Any])
+    }
+    let plain = try parse(RoutingSettings())
+    #expect(!(plain["route"] as! [String: Any]).keys.contains("find_process"))
+    #expect(!String(describing: plain).contains("category-ads"))
+
+    let config = try parse(RoutingSettings(dns: .quad9, blockAds: true), find: true)
+    let route = config["route"] as! [String: Any]
+    #expect(route["find_process"] as? Bool == true)
+    let rules = route["rules"] as! [[String: Any]]
+    #expect(rules[2]["action"] as? String == "reject") // ahead of all direct rules
+    #expect(String(describing: config["dns"]!).contains("9.9.9.9"))
+    // Settings saved before these options existed still load.
+    let old = try JSONDecoder().decode(RoutingSettings.self, from: Data(#"{"profile":"allVPN","direct":[],"proxy":[]}"#.utf8))
+    #expect(old.dns == .cloudflare && !old.blockAds)
+}

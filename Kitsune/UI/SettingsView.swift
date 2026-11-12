@@ -10,6 +10,8 @@ import ServiceManagement
 struct SettingsView: View {
     let vpn: VPNManager
     let library: Library
+    @AppStorage("minimal") private var minimal = false
+    @AppStorage("countryTint") private var countryTint = true
     @State private var showHistory = false
     @State private var showNews = false
     @AppStorage("buttonTheme") private var themeRaw = "copper"
@@ -70,6 +72,8 @@ struct SettingsView: View {
                                 }
                             }
                             toggleRow("Сезонное оформление", $winterMode)
+                            toggleRow("Минимализм на главной", $minimal)
+                            toggleRow("Цвет кнопки по стране", $countryTint)
                             #if os(macOS)
                             toggleRow("Тактильный отклик", $haptics)
                             #endif
