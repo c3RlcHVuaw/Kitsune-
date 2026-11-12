@@ -54,6 +54,11 @@ final class Library {
     private(set) var recent: [String] = UserDefaults.standard.stringArray(forKey: "recentServers") ?? []
     /// True while the active server answers much slower than it did a few minutes ago.
     var slowAlert = false
+    /// Servers that did not answer the last three checks in a row; the list shows them dimmed.
+    private(set) var silent: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "silentServers") ?? [])
+    private var failStreak: [String: Int] = [:]
+    /// A clearly faster server found by the daily check, offered once on the Servers screen.
+    var betterHint: (server: ServerConfig, saved: Int)?
     var selectedID: String? { didSet { UserDefaults.standard.set(selectedID, forKey: "selectedServer"); slowAlert = false } }
     var routing: RoutingSettings { didSet { saveRouting() } }
     /// Set by the root view; used to measure through the running tunnel.
@@ -218,6 +223,36 @@ final class Library {
         async let tunnel: Void = pingThroughTunnel(viaTunnel)
         async let handshake: Void = pingDirect(direct)
         _ = await (tunnel, handshake)
+        for server in servers { track(server.id, pings[server.id]) }
+    }
+
+    private func track(_ id: String, _ ping: Ping?) {
+        switch ping {
+        case .failed:
+            failStreak[id, default: 0] += 1
+            if failStreak[id]! >= 3, silent.insert(id).inserted { UserDefaults.standard.set(Array(silent), forKey: "silentServers") }
+        case .some(.unavailable), .some(.measuring), .none: break
+        default:
+            failStreak[id] = 0
+            if silent.remove(id) != nil { UserDefaults.standard.set(Array(silent), forKey: "silentServers") }
+        }
+    }
+
+    /// Once a day: measure a spread of servers (pinned, recent, one per country) and remember a much faster one.
+    func checkBetterIfDue() async {
+        let key = "betterCheck"
+        guard Date.now.timeIntervalSince1970 - UserDefaults.standard.double(forKey: key) > 20 * 3600,
+              let current = selected, vpn?.status != .connecting else { return }
+        UserDefaults.standard.set(Date.now.timeIntervalSince1970, forKey: key)
+        var seenCountries: Set<String> = []
+        let spread = allServers.filter { s in s.countryCode.map { seenCountries.insert($0).inserted } ?? false }
+        let candidates = Array(Set(([current] + allServers.filter { pinned.contains($0.id) || recent.contains($0.id) } + spread).map(\.id)))
+            .compactMap { id in allServers.first { $0.id == id } }
+        await ping(candidates)
+        guard let now = pings[current.id]?.milliseconds,
+              let best = candidates.compactMap({ s in pings[s.id]?.milliseconds.map { (s, $0) } }).min(by: { $0.1 < $1.1 }),
+              best.0.id != current.id, best.1 + 40 <= now, Double(best.1) <= Double(now) * 0.7 else { return }
+        betterHint = (best.0, now - best.1)
     }
 
     private func pingThroughTunnel(_ servers: [ServerConfig]) async {
@@ -297,6 +332,7 @@ final class Library {
         let elapsed = start.duration(to: .now).components
         let ms = Int(elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000)
         if ok { pings[id] = .tunnel(ms); record(id, ms); checkSlow(id) } else { pings[id] = .failed }
+        track(id, pings[id])
     }
 
     /// Picks the server with the lowest ping among those measured.

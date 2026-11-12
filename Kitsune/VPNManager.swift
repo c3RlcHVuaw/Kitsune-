@@ -36,7 +36,7 @@ final class VPNManager {
     private(set) var downHistory: [Int64] = []
     private(set) var upHistory: [Int64] = []
     /// Programs using the most traffic right now (bytes/s), macOS only: the core must look up the owner of each connection.
-    private(set) var topApps: [(name: String, rate: Int64)] = []
+    private(set) var topApps: [TopApp] = []
     /// A short plain-language note, e.g. after the tunnel recovered by itself. Clears after a few seconds.
     private(set) var notice: String?
     /// Servers present in the running tunnel's config, i.e. measurable through it.
@@ -165,6 +165,14 @@ final class VPNManager {
         }
     }
 
+    struct TopApp: Identifiable, Equatable {
+        var id: String { name }
+        let name: String
+        /// Path of the .app bundle, for its icon; nil for plain command-line programs.
+        let bundle: String?
+        var rate: Int64
+    }
+
     private struct Connections: Decodable {
         struct Item: Decodable {
             struct Meta: Decodable { let processPath: String? }
@@ -178,11 +186,16 @@ final class VPNManager {
         var last: [String: Int64] = [:]
         var lastTime = Date.now
         var primed = false
+        // Smoothed rates and a fixed order (first seen stays first), so chips don't jump around or flicker.
+        var smooth: [String: Double] = [:]
+        var bundles: [String: String] = [:]
+        var order: [String] = []
+        var ticks = 0
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(2))
             guard status == .connected else {
                 if !topApps.isEmpty { topApps = [] }
-                last = [:]; primed = false
+                last = [:]; primed = false; smooth = [:]; order = []
                 continue
             }
             var request = URLRequest(url: URL(string: "http://127.0.0.1:\(Self.controller.port)/connections")!, timeoutInterval: 3)
@@ -194,18 +207,32 @@ final class VPNManager {
             lastTime = now
             var perApp: [String: Int64] = [:]
             var current: [String: Int64] = [:]
+            var newBundles: [String: String] = [:]
             for item in list.connections ?? [] {
                 let total = item.upload + item.download
                 current[item.id] = total
                 guard primed, let path = item.metadata?.processPath, !path.isEmpty else { continue }
-                perApp[Self.appName(path), default: 0] += max(total - (last[item.id] ?? 0), 0)
+                let name = Self.appName(path)
+                perApp[name, default: 0] += max(total - (last[item.id] ?? 0), 0)
+                if let app = path.range(of: ".app/") ?? path.range(of: ".app", options: .backwards) { newBundles[name] = String(path[..<app.upperBound].dropLast(path[app.upperBound...].isEmpty || path.hasSuffix(".app") ? 0 : 1)) }
             }
             last = current
             let wasPrimed = primed
             primed = true
             guard wasPrimed else { continue }
-            topApps = perApp.map { (name: $0.key, rate: Int64(Double($0.value) / seconds)) }
-                .filter { $0.rate > 1024 }.sorted { $0.rate > $1.rate }.prefix(3).map { $0 }
+            bundles.merge(newBundles) { $1 }
+            for (name, bytes) in perApp { AppTraffic.add(name, bytes: bytes) }
+            ticks += 1
+            if ticks % 15 == 0 { AppTraffic.save() }
+            for name in Set(smooth.keys).union(perApp.keys) {
+                let now = Double(perApp[name] ?? 0) / seconds
+                smooth[name] = (smooth[name] ?? now) * 0.6 + now * 0.4
+                if smooth[name]! < 1500 { smooth[name] = nil; order.removeAll { $0 == name } }
+                else if !order.contains(name) { order.append(name) }
+            }
+            // Three slots, in the order apps appeared; a new one waits for a free slot instead of bumping another out.
+            let shown = Array(order.prefix(3)).map { TopApp(name: $0, bundle: bundles[$0], rate: Int64(smooth[$0] ?? 0)) }
+            if shown != topApps { topApps = shown }
         }
     }
 
@@ -519,7 +546,7 @@ extension VPNManager {
                    UserDefaults.standard.object(forKey: "autoReconnect") as? Bool ?? true {
                     await self.reconnectAfterDrop(reason: reason)
                 } else {
-                    if !intentional { self.lastError = reason }
+                    if !intentional { self.lastError = reason; NotificationRouter.notifyDropped() }
                     self.status = .disconnected
                 }
                 return
@@ -540,6 +567,7 @@ extension VPNManager {
         status = .disconnected
         await connectDirect(last.server, servers: last.servers, routing: last.routing)
         if status == .disconnected, lastError == nil { lastError = reason }
+        if status == .disconnected { NotificationRouter.notifyDropped() }
         else if status != .disconnected {
             notice = L("Соединение прервалось, туннель восстановлен")
             Task { try? await Task.sleep(for: .seconds(8)); notice = nil }
@@ -548,7 +576,8 @@ extension VPNManager {
 
     private static func coreError(_ log: URL) -> String? {
         let text = (try? String(contentsOf: log, encoding: .utf8)) ?? ""
-        return text.split(separator: "\n").last { $0.contains("FATAL") || $0.contains("ERROR") }.map(String.init)
+        guard let line = text.split(separator: "\n").last(where: { $0.contains("FATAL") || $0.contains("ERROR") }).map(String.init) else { return nil }
+        return ErrorHint.explain(line).map { L($0) } ?? line
     }
 
     fileprivate static func coreAlive() async -> Bool {

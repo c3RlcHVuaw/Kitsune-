@@ -39,6 +39,7 @@ struct HistoryView: View {
             ScrollView {
                 VStack(spacing: 18) {
                     summaryCard
+                    activityCalendar
                     ListSection(title: "Период") {
                         ForEach(Period.allCases, id: \.self) { item in
                             Button { withAnimation(.smooth) { period = item } } label: {
@@ -138,6 +139,32 @@ struct HistoryView: View {
         }
         .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 24))
+    }
+
+    /// Thirteen weeks of squares, one per day: the darker, the longer the protection ran.
+    private var activityCalendar: some View {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: .now)
+        let hours = Dictionary(grouping: sessions) { cal.startOfDay(for: $0.start) }.mapValues { $0.reduce(0) { $0 + $1.duration } / 3600 }
+        let sinceWeekStart = (cal.component(.weekday, from: today) - cal.firstWeekday + 7) % 7
+        let start = cal.date(byAdding: .day, value: -(12 * 7 + sinceWeekStart), to: today) ?? today
+        return ListSection(title: "Активность", footer: "Последние 13 недель: чем темнее квадрат, тем дольше вы были под защитой.") {
+            HStack(spacing: 4) {
+                ForEach(0..<13, id: \.self) { week in
+                    VStack(spacing: 4) {
+                        ForEach(0..<7, id: \.self) { day in
+                            let date = cal.date(byAdding: .day, value: week * 7 + day, to: start) ?? today
+                            let value = hours[date] ?? 0
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(date > today ? Color.clear : value == 0 ? Color.white.opacity(0.07) : accent.opacity(value < 1 ? 0.3 : value < 3 ? 0.55 : value < 8 ? 0.8 : 1))
+                                .aspectRatio(1, contentMode: .fit)
+                                .help(date.formatted(.dateTime.day().month(.abbreviated)) + String(format: " · %.1f ч", value))
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 12)
+        }
     }
 
     private func stat(_ title: LocalizedStringKey, _ value: String) -> some View {

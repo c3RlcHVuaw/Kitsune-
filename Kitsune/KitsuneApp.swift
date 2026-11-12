@@ -54,6 +54,8 @@ struct KitsuneApp: App {
             #if os(macOS)
             .task {
                 DockBadge.update(connected: vpn.status == .connected, theme: theme)
+                NotificationRouter.register()
+                NotificationRouter.onConnect = { if !vpn.status.isActive { Task { await vpn.toggle(library: library) } } }
                 Hotkey.action = { Task { await vpn.toggle(library: library) } }
                 Hotkey.set(enabled: UserDefaults.standard.object(forKey: "globalHotkey") as? Bool ?? true)
             }
@@ -88,7 +90,8 @@ struct KitsuneApp: App {
         MenuBarExtra(isInserted: $showMenuBar) {
             MenuBarContent(vpn: vpn, library: library, autoConnect: $autoConnect)
         } label: {
-            Image(nsImage: DockBadge.menuIcon(connected: vpn.status == .connected, theme: theme))
+            let _ = MenuFox.shared.bind(vpn)
+            Image(nsImage: MenuFox.shared.icon(connected: vpn.status == .connected, theme: theme))
         }
         #else
         WindowGroup { root }
@@ -172,6 +175,7 @@ struct RootView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1800))
                 await library.refreshDue()
+                await library.checkBetterIfDue()
             }
         }
         #if os(macOS)
@@ -185,9 +189,14 @@ struct RootView: View {
         .task {
             // Launch auto-connect: give the library a moment to load, then connect once.
             guard autoConnect, onboardingDone else { return }
-            try? await Task.sleep(for: .seconds(1))
-            if vpn.status == .disconnected, let server = library.selected {
-                await vpn.connect(server, servers: library.allServers, routing: library.routing)
+            // A few tries: the first second can be too early (library still loading), and a window opening
+            // on top at launch must not cancel the connection.
+            for delay in [1.0, 4.0, 8.0] {
+                try? await Task.sleep(for: .seconds(delay))
+                if vpn.status.isActive || vpn.lastError != nil { return }
+                if vpn.status == .disconnected || vpn.status == .invalid, let server = library.selected {
+                    await vpn.connect(server, servers: library.allServers, routing: library.routing)
+                }
             }
         }
         #endif

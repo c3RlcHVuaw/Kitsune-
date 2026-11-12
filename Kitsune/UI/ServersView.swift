@@ -16,6 +16,22 @@ struct ServersView: View {
     @State var pinging = false
     @AppStorage("serverSort") var sort = "default"
 
+    /// The daily check found a server that is clearly faster than the selected one.
+    private func betterRow(_ hint: (server: ServerConfig, saved: Int)) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "bolt.fill").foregroundStyle(.yellow)
+            Text(String(format: L("Есть быстрее: %@, на %lld мс"), hint.server.displayName, hint.saved)).font(.footnote).lineLimit(1)
+            Spacer(minLength: 4)
+            Button("Выбрать") { withAnimation(.smooth) { library.selectedID = hint.server.id; library.betterHint = nil } }
+                .buttonStyle(.plain).font(.footnote.weight(.semibold))
+            Button("Скрыть", systemImage: "xmark") { withAnimation(.smooth) { library.betterHint = nil } }
+                .labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .glassEffect(.regular, in: .capsule)
+        .transition(.blurReplace)
+    }
+
     /// The last servers you actually used, one tap away.
     private var recentRow: some View {
         let servers = library.recent.compactMap { id in library.allServers.first { $0.id == id } }
@@ -71,6 +87,7 @@ struct ServersView: View {
                         Group {
                             LazyVStack(spacing: 22) {
                                 if library.allServers.count > 12 { searchField }
+                                if let hint = library.betterHint { betterRow(hint) }
                                 if library.allServers.count > 12, query.isEmpty, !library.recent.isEmpty { recentRow }
                                 ForEach(Array(library.subscriptions.enumerated()), id: \.element.id) { index, subscription in
                                     SubscriptionCard(library: library, subscription: subscription).appear(index)
@@ -367,7 +384,7 @@ private struct ServerRows: View {
         // Lazy: a subscription can hold dozens of servers, and building every row at once made the tab stutter.
         LazyVStack(spacing: 0) {
             ForEach(ordered) { server in
-                ServerRow(server: server, selected: library.selected?.id == server.id, pinned: library.pinned.contains(server.id), ping: library.pings[server.id], history: library.pingHistory[server.id] ?? []) {
+                ServerRow(server: server, selected: library.selected?.id == server.id, pinned: library.pinned.contains(server.id), dimmed: library.silent.contains(server.id) && library.selected?.id != server.id, ping: library.pings[server.id], history: library.pingHistory[server.id] ?? []) {
                     withAnimation(.smooth(duration: 0.25)) { library.selectedID = server.id }
                 }
                 .contextMenu {
@@ -394,6 +411,7 @@ private struct ServerRow: View {
     let server: ServerConfig
     let selected: Bool
     var pinned = false
+    var dimmed = false
     let ping: Ping?
     var history: [Int] = []
     var onSelect: () -> Void
@@ -449,6 +467,7 @@ private struct ServerRow: View {
                     .scaleEffect(selected ? 1 : 0.6)
             }
             .opacity(flipped ? 0 : 1)
+            .opacity(dimmed ? 0.45 : 1)
             }
             .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
             .overlay(alignment: .leading) { // outside the rotation, so the tick stays on the left of a flipped card

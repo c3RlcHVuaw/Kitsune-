@@ -13,7 +13,7 @@ struct RoutingView: View {
                 ScrollView {
                     VStack(spacing: 22) {
                         profilePicker.appear(0)
-                        ProtectionSection(dns: binding(\.dns), blockAds: binding(\.blockAds)).appear(1)
+                        ProtectionSection(dns: binding(\.dns), blockAds: binding(\.blockAds), blockIPv6: binding(\.blockIPv6)).appear(1)
                         if library.routing.profile == .russiaDirect { RussianListsSection().appear(1) }
                         if library.routing.usesUserLists {
                             PresetsSection(presets: binding(\.presets)).appear(2)
@@ -60,9 +60,10 @@ private let accent = Color(red: 1.0, green: 0.50, blue: 0.10)
 private struct ProtectionSection: View {
     @Binding var dns: RoutingSettings.DNSProvider
     @Binding var blockAds: Bool
+    @Binding var blockIPv6: Bool
 
     var body: some View {
-        ListSection(title: "DNS и реклама", footer: "Применяется при следующем подключении. Список рекламы обновляется раз в сутки.") {
+        ListSection(title: "DNS и реклама", footer: "Применяется при следующем подключении. Список рекламы обновляется раз в сутки. IPv6 стоит закрыть, если сервер его не поддерживает: иначе он может идти мимо туннеля.") {
             ListRow {
                 Text("DNS через VPN")
                 Spacer()
@@ -75,6 +76,11 @@ private struct ProtectionSection: View {
                 Text("Блокировать рекламу и трекеры")
                 Spacer()
                 Toggle("", isOn: $blockAds).labelsHidden().toggleStyle(.switch).tint(accent)
+            }
+            ListRow {
+                Text("Блокировать IPv6")
+                Spacer()
+                Toggle("", isOn: $blockIPv6).labelsHidden().toggleStyle(.switch).tint(accent)
             }
         }
     }

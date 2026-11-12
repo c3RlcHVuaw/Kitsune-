@@ -80,6 +80,8 @@ public enum ConfigBuilder {
             routeRules.insert(["rule_set": [RuleSources.adsSet.0], "action": "reject"], at: 2) // before every direct/proxy rule
         }
 
+        if routing.blockIPv6 { routeRules.insert(["ip_version": 6, "action": "reject"], at: 2) }
+
         var route: [String: Any] = [
             "rules": routeRules,
             "final": "proxy",
@@ -101,6 +103,7 @@ public enum ConfigBuilder {
             "final": "remote",
         ]
         if !dnsRules.isEmpty { dns["rules"] = dnsRules }
+        if routing.blockIPv6 { dns["strategy"] = "ipv4_only" }
 
         var config: [String: Any] = [
             "log": ["level": "info"],

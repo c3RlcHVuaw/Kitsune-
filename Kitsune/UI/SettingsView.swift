@@ -21,6 +21,9 @@ struct SettingsView: View {
     @AppStorage("lanShare") private var lanShare = false
     @State private var sharePassword = LANSharing.password()
     @State private var passwordCopied = false
+    @State private var showQR = false
+    @State private var shareCopied = false
+    @State private var cardCopied = false
     #endif
     @State private var transferNote: LocalizedStringKey?
     @AppStorage("onboardingDone") private var onboardingDone = true
@@ -79,6 +82,10 @@ struct SettingsView: View {
                             #endif
                         }
                         .appear(1)
+                        ListSection(title: "Главный экран", footer: "Тяните карточки, чтобы поменять порядок. Глаз скрывает блок.") {
+                            HomeLayoutEditor()
+                        }
+                        .appear(1)
                         #if os(macOS)
                         ListSection(title: "Запуск") {
                             toggleRow("Подключаться при запуске", $autoConnect)
@@ -101,6 +108,7 @@ struct SettingsView: View {
                                 buttonRow(passwordCopied ? "Пароль скопирован" : "Скопировать пароль", "doc.on.doc") {
                                     Clipboard.copy(sharePassword); passwordCopied = true
                                 }
+                                buttonRow("Показать QR-код", "qrcode") { showQR = true }
                                 buttonRow("Сменить пароль", "arrow.triangle.2.circlepath") { sharePassword = LANSharing.regenerate(); passwordCopied = false }
                             }
                         }
@@ -151,6 +159,14 @@ struct SettingsView: View {
                         }
                         .appear(3)
                         ListSection(footer: "Kitsune не собирает данные и не видит, какие сайты вы открываете.") {
+                            buttonRow(cardCopied ? "Карточка скопирована" : "Карточка «мой Kitsune»", "photo") {
+                                ShareCard.copy()
+                                cardCopied = true
+                            }
+                            buttonRow(shareCopied ? "Ссылка скопирована" : "Поделиться Kitsune", "square.and.arrow.up") {
+                                Clipboard.copy(L("Kitsune: VPN, который не мешает. Российские сайты напрямую, остальное через туннель.") + " https://github.com/c3RlcHVuaw/Kitsune-/releases/latest")
+                                shareCopied = true
+                            }
                             ListRow { Text("Версия"); Spacer(); Text(version).foregroundStyle(.secondary) }
                             ListRow { Text("Ядро"); Spacer(); Text("sing-box").foregroundStyle(.secondary) }
                         }
@@ -170,6 +186,7 @@ struct SettingsView: View {
             #if os(macOS)
             .sheet(isPresented: $showHistory) { HistoryView() }
             .sheet(isPresented: $showNews) { WhatsNewView() }
+            .sheet(isPresented: $showQR) { ShareQRView(address: "\(LANSharing.localAddress() ?? "—"):\(LANSharing.port)", password: sharePassword) }
             .sheet(isPresented: $showDiagnostics) { DiagnosticsView(vpn: vpn, server: nil) }
             #endif
         }

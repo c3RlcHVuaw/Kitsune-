@@ -20,6 +20,8 @@ struct HomeView: View {
     @AppStorage("buttonTheme") private var themeRaw = "copper"
     @AppStorage("winterMode") private var winterMode = true
     @AppStorage("minimal") private var minimal = false
+    @AppStorage(HomeBlock.orderKey) private var homeOrder = ""
+    @AppStorage(HomeBlock.hiddenKey) private var homeHidden = ""
     @AppStorage("countryTint") private var countryTint = true
     @State private var celebrate = 0
     @State private var check = ConnectionCheck()
@@ -48,6 +50,19 @@ struct HomeView: View {
         return CountryColor.of(code)
     }
     private var hasError: Bool { vpn.lastError != nil && !vpn.status.isActive }
+
+    @ViewBuilder private func blockView(_ block: HomeBlock, server: ServerConfig) -> some View {
+        switch block {
+        case .status:
+            VStack(spacing: 8) {
+                CheckChip(state: check.state)
+                LiveLine(vpn: vpn, library: library, server: server)
+            }
+        case .info: ConnectionInfo(server: server)
+        case .speed: SpeedRow(vpn: vpn, accent: theme.accent)
+        case .apps: TopApps(apps: vpn.topApps)
+        }
+    }
 
     var body: some View {
         Group {
@@ -79,13 +94,6 @@ struct HomeView: View {
                     tab = .servers
                 }
                 .padding(.top, 28)
-                if vpn.status == .connected, !hasError, !minimal {
-                    VStack(spacing: 8) {
-                        CheckChip(state: check.state)
-                        LiveLine(vpn: vpn, library: library, server: server)
-                    }
-                    .padding(.top, 6)
-                }
                 if vpn.status == .connected, !hasError {
                     VStack(spacing: 8) {
                         if let notice = vpn.notice {
@@ -116,13 +124,15 @@ struct HomeView: View {
                             .padding(.vertical, 12)
                             .glassEffect(.regular, in: .rect(cornerRadius: 18))
                     } else if vpn.status == .connected, !minimal, let server {
-                        GlassEffectContainer(spacing: 12) {
-                            VStack(spacing: 12) {
-                                ConnectionInfo(server: server).appear(0)
-                                SpeedRow(vpn: vpn, accent: theme.accent).appear(1)
-                                TopApps(apps: vpn.topApps)
+                        VStack(spacing: 12) {
+                            ForEach(Array(HomeBlock.order(homeOrder).enumerated()), id: \.element) { index, block in
+                                if !homeHidden.contains(block.rawValue) {
+                                    blockView(block, server: server).appear(index)
+                                }
                             }
                         }
+                        .animation(.smooth, value: homeOrder)
+                        .animation(.smooth, value: homeHidden)
                     }
                 }
                 .padding(.top, 20)
@@ -408,25 +418,70 @@ private struct SleepZ: View {
     }
 }
 
-/// The three programs moving the most data right now.
+/// Who is using the connection right now: three fixed slots with the app icon, name and speed. The slots never move or
+/// change size: an app only fades in or out inside its slot, so nothing overlaps and nothing below shifts.
 private struct TopApps: View {
-    let apps: [(name: String, rate: Int64)]
+    let apps: [VPNManager.TopApp]
 
     var body: some View {
-        if !apps.isEmpty {
-            HStack(spacing: 8) {
-                ForEach(apps, id: \.name) { app in
-                    Text("\(app.name) · \(ByteCountFormatter.string(fromByteCount: app.rate, countStyle: .binary))" + L("/с"))
-                        .font(.caption.monospacedDigit()).lineLimit(1)
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(.white.opacity(0.08), in: .capsule)
+        let top = max(1, apps.map(\.rate).max() ?? 1)
+        VStack(spacing: 0) {
+            ForEach(0..<3, id: \.self) { slot in
+                let app = slot < apps.count ? apps[slot] : nil
+                HStack(spacing: 10) {
+                    if let app {
+                        icon(for: app).resizable().frame(width: 22, height: 22)
+                        Text(app.name).font(.callout.weight(.medium)).lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Capsule().fill(.white.opacity(0.1)).frame(width: 54, height: 4)
+                            .overlay(alignment: .leading) {
+                                Capsule().fill(Color.brand.opacity(0.85))
+                                    .frame(width: max(4, 54 * Double(app.rate) / Double(top)))
+                            }
+                        Text(ByteCountFormatter.string(fromByteCount: app.rate, countStyle: .binary) + L("/с"))
+                            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            .frame(width: 68, alignment: .trailing)
+                            .contentTransition(.numericText())
+                        .id(app.name)
+                    }
                 }
+                .padding(.horizontal, 16)
+                .frame(height: 38)
+                .transition(.opacity)
             }
-            // The list reshuffles every two seconds; animating that made the capsules overlap mid-move.
-            .transaction { $0.animation = nil }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 4)
+        .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        .animation(.smooth(duration: 0.5), value: apps.map(\.name))
+        .animation(.smooth(duration: 0.6), value: apps.map(\.rate))
+        .overlay {
+            if apps.isEmpty { Text("Пока тихо").font(.footnote).foregroundStyle(.tertiary) }
         }
     }
+
+    private func icon(for app: VPNManager.TopApp) -> Image {
+        #if os(macOS)
+        Image(nsImage: AppIcons.icon(bundle: app.bundle))
+        #else
+        Image(systemName: "app")
+        #endif
+    }
 }
+
+#if os(macOS)
+/// App icons by bundle path, loaded once.
+@MainActor private enum AppIcons {
+    private static var cache: [String: NSImage] = [:]
+    static func icon(bundle: String?) -> NSImage {
+        guard let bundle else { return NSWorkspace.shared.icon(for: .unixExecutable) }
+        if let hit = cache[bundle] { return hit }
+        let image = NSWorkspace.shared.icon(forFile: bundle)
+        cache[bundle] = image
+        return image
+    }
+}
+#endif
 
 private struct PressScale: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -647,6 +702,10 @@ private struct LiveLine: View {
     private var lines: [String] {
         var result: [String] = []
         if let days = History.comeback { result.append(String(format: L("С возвращением! Не виделись %lld дн."), days)) }
+        if let change = History.countryChange {
+            let names = [change.from, change.to].map { Locale.current.localizedString(forRegionCode: $0) ?? $0 }
+            result.append(String(format: L("Страна выхода сменилась: %@ → %@"), names[0], names[1]))
+        }
         if let code = server?.countryCode, let name = Locale.current.localizedString(forRegionCode: code) { result.append(String(format: L("Выход: %@"), name)) }
         let profile = switch library.routing.profile {
         case .russiaDirect: L("Россия напрямую")
@@ -656,6 +715,7 @@ private struct LiveLine: View {
         result.append(profile)
         result.append(String(format: L("Скорость %@"), ByteCountFormatter.string(fromByteCount: vpn.downRate + vpn.upRate, countStyle: .binary) + L("/с")))
         result.append(String(format: L("Сегодня под защитой: %@"), todayText))
+        if let top = AppTraffic.top { result.append(String(format: L("Больше всего сегодня: %@, %@"), top.name, ByteCountFormatter.string(fromByteCount: top.bytes, countStyle: .binary))) }
         return result
     }
 
@@ -692,68 +752,57 @@ private struct SpeedRow: View {
     private var down: Color { accent }
     private let up = Color.white
 
-    private struct Point: Identifiable { let id: Int; let down: Double; let up: Double }
-    private var points: [Point] {
+    private struct Bar: Identifiable { let id: Int; let down: Double; let up: Double }
+    /// Last 60 s folded into 30 thin bars: calmer than a line, no wobble when values change.
+    private var bars: [Bar] {
         let d = vpn.downHistory, u = vpn.upHistory
-        return d.indices.map { Point(id: 60 - d.count + $0, down: Double(d[$0]), up: Double(u.indices.contains($0) ? u[$0] : 0)) }
+        let pad = max(0, 60 - d.count)
+        let down = Array(repeating: Int64(0), count: pad) + d
+        let up = Array(repeating: Int64(0), count: pad) + (0..<d.count).map { u.indices.contains($0) ? u[$0] : 0 }
+        return (0..<30).map { i in
+            Bar(id: i, down: Double(max(down[i * 2], down[i * 2 + 1])), up: Double(max(up[i * 2], up[i * 2 + 1])))
+        }
     }
-    /// Average of the last 8 seconds: the placeholder wave returns when traffic calms down, and stays faintly behind real traffic.
-    private var recent: Int64 { (vpn.downHistory.suffix(8).reduce(0, +) + vpn.upHistory.suffix(8).reduce(0, +)) / 8 }
-    private var peak: Int64 { max(vpn.downHistory.max() ?? 0, vpn.upHistory.max() ?? 0) }
+    private var peak: Double { max(100_000, bars.map { max($0.down, $0.up) }.max() ?? 0) }
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack(alignment: .top) {
-                rate("arrow.down", vpn.downRate, down)
-                Spacer()
-                VStack(spacing: 2) {
-                    Text("пик").font(.caption2).foregroundStyle(.secondary)
-                    Text(Self.rate(peak)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                }
-                Spacer()
-                rate("arrow.up", vpn.upRate, up)
+        VStack(spacing: 14) {
+            HStack(spacing: 0) {
+                column("arrow.down", L("загрузка"), vpn.downRate, vpn.downTotal, down)
+                Rectangle().fill(.white.opacity(0.08)).frame(width: 1, height: 44)
+                column("arrow.up", L("отдача"), vpn.upRate, vpn.upTotal, up)
             }
-            ZStack {
-            IdleWave(strength: max(0.3, 1 - Double(recent) / 400_000), accent: accent).frame(height: 70)
-            Chart(points) { p in
-                AreaMark(x: .value("t", p.id), y: .value("down", p.down), series: .value("s", "down"))
-                    .interpolationMethod(.catmullRom)
-                    .foregroundStyle(LinearGradient(colors: [down.opacity(0.55), down.opacity(0)], startPoint: .top, endPoint: .bottom))
-                LineMark(x: .value("t", p.id), y: .value("down", p.down), series: .value("s", "down"))
-                    .interpolationMethod(.catmullRom)
-                    .foregroundStyle(down)
-                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
-                LineMark(x: .value("t", p.id), y: .value("up", p.up), series: .value("s", "up"))
-                    .interpolationMethod(.catmullRom)
-                    .foregroundStyle(up.opacity(0.7))
-                    .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round))
+            Chart(bars) { bar in
+                BarMark(x: .value("t", bar.id), y: .value("down", bar.down), width: .fixed(5))
+                    .cornerRadius(2.5)
+                    .foregroundStyle(down.opacity(0.85))
+                BarMark(x: .value("t", bar.id), y: .value("up", bar.up), width: .fixed(5))
+                    .cornerRadius(2.5)
+                    .foregroundStyle(up.opacity(0.35))
             }
-            .chartXScale(domain: 0...59)
-            .chartYScale(domain: 0...Double(max(peak, 100_000)) * 1.15) // calm line, not noise, when nothing moves
+            .chartXScale(domain: -0.5...29.5)
+            .chartYScale(domain: 0...peak * 1.1)
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
-            .frame(height: 70)
-            .animation(.smooth(duration: 0.6), value: vpn.downHistory)
-            }
-            HStack {
-                Text(L("за сессию ") + Self.bytes(vpn.downTotal)).foregroundStyle(down)
-                Spacer()
-                Text(L("за сессию ") + Self.bytes(vpn.upTotal)).foregroundStyle(.secondary)
-            }
-            .font(.caption.monospacedDigit())
-            .contentTransition(.numericText())
+            .frame(height: 44)
+            .opacity(0.9)
         }
-        .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .glassEffect(.regular, in: .rect(cornerRadius: 22))
         .accessibilityElement(children: .combine)
     }
 
-    private func rate(_ icon: String, _ value: Int64, _ color: Color) -> some View {
-        Label(Self.rate(value), systemImage: icon)
-            .font(.headline.monospacedDigit())
-            .foregroundStyle(color)
-            .contentTransition(.numericText())
-            .animation(.smooth(duration: 0.3), value: value)
+    private func column(_ icon: String, _ title: String, _ rate: Int64, _ total: Int64, _ color: Color) -> some View {
+        VStack(spacing: 3) {
+            Label(title, systemImage: icon).font(.caption2).foregroundStyle(.secondary).labelStyle(.titleAndIcon)
+            Text(Self.rate(rate))
+                .font(.system(size: 21, weight: .semibold, design: .rounded).monospacedDigit())
+                .foregroundStyle(color)
+                .contentTransition(.numericText())
+                .animation(.smooth(duration: 0.3), value: rate)
+            Text(Self.bytes(total)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private static func bytes(_ value: Int64) -> String { ByteCountFormatter.string(fromByteCount: value, countStyle: .binary) }

@@ -11,12 +11,15 @@ import Foundation
 
     /// Whole days since the previous connection, when it was a week or more ago; the home screen greets the comeback.
     private(set) static var comeback: Int?
+    /// Set when this connection exits in another country than the previous one did.
+    private(set) static var countryChange: (from: String, to: String)?
 
     static func begin(server: String, country: String? = nil) {
         guard current == nil else { return }
         current = (server, country, .now)
         let days = sessions.last.map { Calendar.current.dateComponents([.day], from: $0.end, to: .now).day ?? 0 } ?? 0
         comeback = days >= 7 ? days : nil
+        if let before = sessions.last?.country, let now = country, before != now { countryChange = (before, now) } else { countryChange = nil }
     }
 
     static var totalHours: Int { Int(sessions.reduce(0) { $0 + $1.duration } / 3600) }
@@ -25,6 +28,7 @@ import Foundation
         guard let current else { return }
         self.current = nil
         comeback = nil
+        countryChange = nil
         guard Date.now.timeIntervalSince(current.start) >= 5 else { return } // failed attempts aren't history
         sessions = Array((sessions + [Session(server: current.server, country: current.country, start: current.start, end: .now, down: down, up: up)]).suffix(200))
         UserDefaults.standard.set(try? JSONEncoder().encode(sessions), forKey: key)

@@ -157,3 +157,16 @@ private func routeOutbounds(_ routing: RoutingSettings) throws -> [String] {
     let old = try JSONDecoder().decode(RoutingSettings.self, from: Data(#"{"profile":"allVPN","direct":[],"proxy":[]}"#.utf8))
     #expect(old.dns == .cloudflare && !old.blockAds)
 }
+
+@Test func ipv6BlockRejectsTrafficAndAnswers() throws {
+    let server = try ProxyLink.parse("vless://11111111-1111-1111-1111-111111111111@example.com:443?security=reality&pbk=abc&sni=a.com&fp=chrome&type=tcp#t")
+    func config(_ routing: RoutingSettings) throws -> [String: Any] {
+        try #require(JSONSerialization.jsonObject(with: Data(ConfigBuilder.build(server, routing: routing).utf8)) as? [String: Any])
+    }
+    let on = try config(RoutingSettings(blockIPv6: true))
+    let rules = (on["route"] as! [String: Any])["rules"] as! [[String: Any]]
+    #expect(rules.contains { $0["ip_version"] as? Int == 6 && $0["action"] as? String == "reject" })
+    #expect((on["dns"] as! [String: Any])["strategy"] as? String == "ipv4_only")
+    let off = try config(RoutingSettings())
+    #expect((off["dns"] as! [String: Any])["strategy"] == nil)
+}

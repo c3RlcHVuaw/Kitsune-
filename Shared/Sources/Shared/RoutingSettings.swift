@@ -34,6 +34,8 @@ public struct RoutingSettings: Codable, Equatable, Sendable {
     public var dns: DNSProvider
     /// Drops connections to known ad and tracker domains.
     public var blockAds: Bool
+    /// Rejects IPv6 traffic and IPv6 DNS answers: servers without IPv6 would otherwise leak it silently.
+    public var blockIPv6: Bool
     /// "Always direct" entries: domains (`example.com`, `*.example.com`) or IPs/CIDRs.
     public var direct: [String]
     /// "Always through VPN" entries, same format.
@@ -48,7 +50,8 @@ public struct RoutingSettings: Codable, Equatable, Sendable {
 
     public init(profile: Profile = .russiaDirect, direct: [String] = [], proxy: [String] = [], presets: Set<RoutePreset> = [],
                 directApps: [String] = [], proxyApps: [String] = [], appServers: [String: String] = [:],
-                dns: DNSProvider = .cloudflare, blockAds: Bool = false) {
+                dns: DNSProvider = .cloudflare, blockAds: Bool = false, blockIPv6: Bool = false) {
+        self.blockIPv6 = blockIPv6
         self.dns = dns
         self.blockAds = blockAds
         self.profile = profile
@@ -66,6 +69,7 @@ public struct RoutingSettings: Codable, Equatable, Sendable {
         profile = try c.decode(Profile.self, forKey: .profile)
         dns = try c.decodeIfPresent(DNSProvider.self, forKey: .dns) ?? .cloudflare
         blockAds = try c.decodeIfPresent(Bool.self, forKey: .blockAds) ?? false
+        blockIPv6 = try c.decodeIfPresent(Bool.self, forKey: .blockIPv6) ?? false
         direct = try c.decode([String].self, forKey: .direct)
         proxy = try c.decode([String].self, forKey: .proxy)
         presets = try c.decodeIfPresent(Set<RoutePreset>.self, forKey: .presets) ?? []
