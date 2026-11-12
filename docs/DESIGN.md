@@ -69,6 +69,24 @@ Code ↔ token: `Color.brand` = `brand/orange`, `ButtonTheme.accent/soft/glow` =
 
 Ids are hints; find components by name if one moved.
 
+## Windows (Fluent) — page “Windows”
+
+Design-only for now (no Windows build). Windows 11 look with the Kitsune brand: Mica window, layered content,
+Fluent controls, copper accent. Window **1000 × 680**, radius 8, `Win/TitleBar` (48) → body: navigation pane 280
+(`Win/NavItem`, Settings pinned to the bottom) + content layer (`win/layer`, top-left radius 8, padding 40/32).
+
+- Tokens: collection **Windows** (`win/mica`, `win/layer`, `win/card`, `win/control`, `win/text{,-2,-3}`,
+  `win/accent` (copper), `win/on-accent`, `win/success`, `win/critical`, `win/acrylic`, …).
+- Type: `Win/Caption 12`, `Win/Body 14`, `Win/Body Strong 14`, `Win/Subtitle 20`, `Win/Title 28`, `Win/Title Large 40`,
+  `Win/Display 68`. Inter stands in for Segoe UI Variable (not in Figma). Brand numbers and the status title stay Unbounded.
+- Effects: `Win/Elevation Window`, `Win/Elevation Flyout` (acrylic blur), `Win/Elevation Card`.
+- Components: `Win/TitleBar`, `Win/NavItem` (State), `Win/Toggle` (On, with “Вкл./Откл.” label), `Win/Button`
+  (Style: Accent/Standard), `Win/ComboBox`, `Win/SearchBox`, `Win/SelectorBar` (Selected), `Win/SettingsCard`
+  (Trailing: None/Toggle/Combo/Chevron/Button; stack with 4 px gaps under a `Win/Body Strong` group title),
+  `Win/ServerRow` (Selected), `Win/InfoBar` (Severity).
+- Screens: Главная (подключено/отключено, two columns: hero card + 300 px right column), Серверы, Маршруты,
+  Настройки, tray flyout (360, acrylic) instead of the macOS menu bar.
+
 ## Working with the file through the Figma API (agents)
 
 - Load `figma-use` + `figma-generate-library`/`figma-generate-design` skills before `use_figma`.
