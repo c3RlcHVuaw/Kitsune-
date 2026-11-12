@@ -7,9 +7,11 @@ struct FoxMark: View {
     /// 0...1: ears fall outward and down (error). `sway` -1...1: both ears lean sideways (the happy wiggle on connect).
     var droop: CGFloat = 0
     var sway: CGFloat = 0
+    /// 0...1: only the right ear flicks.
+    var twitch: CGFloat = 0
 
     var body: some View {
-        FoxHead(droop: droop, sway: sway)
+        FoxHead(droop: droop, sway: sway, twitch: twitch)
             .fill(color)
             .aspectRatio(1, contentMode: .fit)
             .accessibilityHidden(true)
@@ -19,10 +21,11 @@ struct FoxMark: View {
 struct FoxHead: Shape {
     var droop: CGFloat = 0
     var sway: CGFloat = 0
+    var twitch: CGFloat = 0
 
-    var animatableData: AnimatablePair<CGFloat, CGFloat> {
-        get { AnimatablePair(droop, sway) }
-        set { droop = newValue.first; sway = newValue.second }
+    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, CGFloat> {
+        get { AnimatablePair(AnimatablePair(droop, sway), twitch) }
+        set { droop = newValue.first.first; sway = newValue.first.second; twitch = newValue.second }
     }
 
     func path(in r: CGRect) -> Path {
@@ -31,7 +34,7 @@ struct FoxHead: Shape {
             p.move(to: pt(0.10 - 0.06 * droop + 0.06 * sway, 0.10 + 0.18 * droop))  // left ear tip
             p.addLine(to: pt(0.38, 0.36))
             p.addLine(to: pt(0.62, 0.36))
-            p.addLine(to: pt(0.90 + 0.06 * droop + 0.06 * sway, 0.10 + 0.18 * droop)) // right ear tip
+            p.addLine(to: pt(0.90 + 0.06 * droop + 0.06 * sway + 0.05 * twitch, 0.10 + 0.18 * droop + 0.07 * twitch)) // right ear tip
             p.addLine(to: pt(0.90, 0.52))
             p.addLine(to: pt(0.50, 0.92)) // muzzle
             p.addLine(to: pt(0.10, 0.52))

@@ -19,6 +19,9 @@ struct HomeView: View {
 
     @AppStorage("buttonTheme") private var themeRaw = "copper"
     @AppStorage("winterMode") private var winterMode = true
+    @State private var check = ConnectionCheck()
+    @State private var taps = 0
+    @State private var flip = 0
 
     private var theme: ButtonTheme { ButtonTheme(rawValue: themeRaw) ?? .copper }
     private var server: ServerConfig? { library.selected }
@@ -49,6 +52,7 @@ struct HomeView: View {
                 #endif
                 Text("kitsune")
                     .font(.display(15, relativeTo: .headline))
+                    .onTapGesture { taps += 1; if taps % 7 == 0 { flip += 1 } }
                     .accessibilityAddTraits(.isHeader)
                 }
                 .padding(.top, 8)
@@ -56,12 +60,18 @@ struct HomeView: View {
                 ClipboardOffer(library: library).padding(.top, 10)
                 #endif
                 Spacer(minLength: 16)
-                ConnectButton(status: vpn.status, theme: theme, ring: ringColor, winter: winterMode && Snow.isSeason, error: hasError, action: toggle)
+                ConnectButton(status: vpn.status, theme: theme, ring: ringColor, winter: winterMode && Snow.isSeason, error: hasError, action: toggle, flip: flip)
                 StatusCaption(status: vpn.status, hasError: hasError, server: server, connectedDate: vpn.connectedDate) {
                     tab = .servers
                 }
                 .padding(.top, 28)
-                if vpn.status == .connected, !hasError { LiveLine(vpn: vpn, library: library, server: server).padding(.top, 6) }
+                if vpn.status == .connected, !hasError {
+                    VStack(spacing: 8) {
+                        CheckChip(state: check.state)
+                        LiveLine(vpn: vpn, library: library, server: server)
+                    }
+                    .padding(.top, 6)
+                }
                 Group {
                     if let error = vpn.lastError, hasError {
                         Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -99,6 +109,14 @@ struct HomeView: View {
             }
         }
         .onChange(of: server?.id) { vpn.clearError() }
+        .onChange(of: vpn.status) { _, new in
+            switch new {
+            case .connecting: check.prepare()
+            case .connected: Task { await check.verify() }
+            case .disconnected, .invalid: check.reset()
+            default: break
+            }
+        }
         #if os(macOS)
         .onChange(of: vpn.status) { old, new in
             // Soft system sounds on connect and on a user-driven disconnect.
@@ -142,6 +160,10 @@ private struct ConnectButton: View {
     @State private var spin = false
     @State private var burst: Date?
     @State private var sway: CGFloat = 0
+    @State private var twitch: CGFloat = 0
+    @State private var flipAngle = 0.0
+    /// Bumped by the home screen when the wordmark is tapped seven times.
+    var flip = 0
 
     private var copper: Color { theme.accent }
     private var busy: Bool { status == .connecting || status == .disconnecting || status == .reasserting }
@@ -172,8 +194,9 @@ private struct ConnectButton: View {
                     .shadow(color: .black.opacity(0.5), radius: 18, y: 10)
                     .glassEffect(connected ? .regular.tint(copper.opacity(0.45)) : .regular, in: .circle)
                     .animation(.smooth(duration: 0.8), value: status)
-                FoxMark(color: connected ? .white : theme.soft, droop: error ? 1 : 0, sway: sway)
+                FoxMark(color: connected ? .white : theme.soft, droop: error ? 1 : 0, sway: sway, twitch: twitch)
                     .animation(.smooth(duration: 0.5), value: error)
+                    .rotation3DEffect(.degrees(flipAngle), axis: (x: 0, y: 1, z: 0))
                     .frame(width: 88)
                     .offset(y: 4)
                     .phaseAnimator([false, true], trigger: connected) { view, phase in
@@ -190,6 +213,23 @@ private struct ConnectButton: View {
             } animation: { _ in .easeInOut(duration: 1.8) }
         }
         .buttonStyle(PressScale())
+        .task {
+            // The fox lives its own life: now and then an ear flicks.
+            guard !reduceMotion else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Double.random(in: 7...16)))
+                guard !error, !busy else { continue }
+                for value in [1, 0, 1, 0] as [CGFloat] {
+                    withAnimation(.easeInOut(duration: 0.09)) { twitch = value }
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+            }
+        }
+        .onChange(of: flip) {
+            guard !reduceMotion else { return }
+            withAnimation(.spring(duration: 0.9, bounce: 0.25)) { flipAngle = 360 }
+            Task { try? await Task.sleep(for: .seconds(1)); flipAngle = 0 }
+        }
         .onChange(of: connected) { _, isConnected in
             guard isConnected, !reduceMotion else { return }
             burst = .now
@@ -394,6 +434,31 @@ private struct ConnectionInfo: View {
     }
 }
 
+// MARK: - Connection check
+
+/// A short green tick (or amber hint) right after connecting; it fades away by itself.
+private struct CheckChip: View {
+    let state: ConnectionCheck.State
+
+    var body: some View {
+        Group {
+            switch state {
+            case .idle: EmptyView()
+            case .running:
+                Label { Text("Проверяем соединение…") } icon: { ProgressView().controlSize(.mini) }
+            case .ok(let text):
+                Label(text, systemImage: "checkmark.circle.fill").foregroundStyle(Color(red: 0.45, green: 0.90, blue: 0.55))
+            case .warn(let text):
+                Label(text, systemImage: "exclamationmark.triangle.fill").foregroundStyle(Color(red: 1.0, green: 0.78, blue: 0.30))
+            }
+        }
+        .font(.footnote.weight(.medium))
+        .transition(.blurReplace)
+        .animation(.smooth, value: state)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 // MARK: - Live line
 
 /// One quiet line under the status that cycles: exit country, routing profile, current speed, time protected today.
@@ -405,7 +470,7 @@ private struct LiveLine: View {
 
     private var lines: [String] {
         var result: [String] = []
-        if let code = countryCode, let name = Locale.current.localizedString(forRegionCode: code) { result.append(String(format: L("Выход: %@"), name)) }
+        if let code = server?.countryCode, let name = Locale.current.localizedString(forRegionCode: code) { result.append(String(format: L("Выход: %@"), name)) }
         let profile = switch library.routing.profile {
         case .russiaDirect: L("Россия напрямую")
         case .allVPN: L("Весь трафик через VPN")
@@ -415,12 +480,6 @@ private struct LiveLine: View {
         result.append(String(format: L("Скорость %@"), ByteCountFormatter.string(fromByteCount: vpn.downRate + vpn.upRate, countStyle: .binary) + L("/с")))
         result.append(String(format: L("Сегодня под защитой: %@"), todayText))
         return result
-    }
-
-    private var countryCode: String? {
-        guard let flag = server?.flag else { return nil }
-        let letters = flag.unicodeScalars.compactMap { Unicode.Scalar($0.value - 0x1F1A5) }.map { String($0) }.joined()
-        return letters.count == 2 ? letters : nil
     }
 
     private var todayText: String {

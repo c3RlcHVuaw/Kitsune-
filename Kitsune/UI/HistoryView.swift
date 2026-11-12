@@ -121,6 +121,20 @@ struct HistoryView: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 4)
+            let badges = History.badges
+            if !badges.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(badges, id: \.title) { badge in
+                        Label(badge.title, systemImage: badge.icon)
+                            .font(.caption.weight(.medium))
+                            .padding(.horizontal, 10).padding(.vertical, 5)
+                            .background(accent.opacity(0.16), in: .capsule)
+                            .foregroundStyle(accent)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 4)
+            }
         }
         .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 24))

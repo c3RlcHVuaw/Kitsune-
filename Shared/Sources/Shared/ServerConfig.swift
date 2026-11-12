@@ -35,6 +35,13 @@ public struct ServerConfig: Codable, Hashable, Sendable, Identifiable {
         return nil
     }
 
+    /// Two-letter country code from the flag ("🇳🇱" → "NL").
+    public var countryCode: String? {
+        guard let flag else { return nil }
+        let letters = flag.unicodeScalars.compactMap { Unicode.Scalar($0.value - 0x1F1A5) }.map { String($0) }.joined()
+        return letters.count == 2 ? letters : nil
+    }
+
     /// Name without the flag and surrounding spaces.
     /// TCP-based protocols can be pinged with a TCP connect; QUIC ones (Hysteria2, TUIC) cannot.
     public var isUDP: Bool { outbound.contains(#""type":"hysteria2""#) || outbound.contains(#""type":"tuic""#) }

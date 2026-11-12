@@ -270,6 +270,7 @@ private struct ServerRows: View {
     let servers: [ServerConfig]
     var editing: Binding<ServerConfig?>?
     @AppStorage("serverSort") private var sort = "default"
+    @State private var heat: ServerConfig?
 
     private var ordered: [ServerConfig] {
         switch sort {
@@ -288,6 +289,7 @@ private struct ServerRows: View {
                 }
                 .contextMenu {
                     Button("Проверить пинг", systemImage: "speedometer") { Task { await library.ping([server]) } }
+                    Button("Пинг по часам", systemImage: "chart.bar.xaxis") { heat = server }
                     if let link = server.link { Button("Копировать ссылку", systemImage: "doc.on.doc") { Clipboard.copy(link) } }
                     if let editing {
                         Button("Изменить", systemImage: "pencil") { editing.wrappedValue = server }
@@ -298,6 +300,7 @@ private struct ServerRows: View {
             }
         }
         .sensoryFeedback(.selection, trigger: library.selected?.id)
+        .sheet(item: $heat) { PingHeatmapView(server: $0) }
     }
 }
 

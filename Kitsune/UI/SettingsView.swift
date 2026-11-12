@@ -11,10 +11,14 @@ struct SettingsView: View {
     let vpn: VPNManager
     let library: Library
     @State private var showHistory = false
+    @State private var showNews = false
     @AppStorage("buttonTheme") private var themeRaw = "copper"
     @AppStorage("winterMode") private var winterMode = true
     #if os(macOS)
     @AppStorage("haptics") private var haptics = true
+    @AppStorage("lanShare") private var lanShare = false
+    @State private var sharePassword = LANSharing.password()
+    @State private var passwordCopied = false
     #endif
     @State private var transferNote: LocalizedStringKey?
     @AppStorage("onboardingDone") private var onboardingDone = true
@@ -82,6 +86,21 @@ struct SettingsView: View {
                             toggleRow("Уведомления о подписке", $notifications)
                         }
                         .appear(1)
+                        ListSection(title: "Раздача по сети", footer: lanShare
+                            ? "Устройства в вашей сети смогут выходить в интернет через ваш VPN по этому адресу, логину и паролю. Применяется при следующем подключении. Не включайте в чужих и общих сетях."
+                            : "Для телевизора или консоли: они подключаются к Kitsune как к HTTP или SOCKS5 прокси, и их трафик идёт через туннель. Защищено случайным паролем.") {
+                            toggleRow("Раздавать VPN по сети", $lanShare)
+                            if lanShare {
+                                ListRow { Text("Адрес"); Spacer(); Text("\(LANSharing.localAddress() ?? "—"):\(LANSharing.port)").monospacedDigit().foregroundStyle(.secondary).textSelection(.enabled) }
+                                ListRow { Text("Логин"); Spacer(); Text(LANSharing.username).foregroundStyle(.secondary).textSelection(.enabled) }
+                                ListRow { Text("Пароль"); Spacer(); Text(sharePassword).font(.body.monospaced()).foregroundStyle(.secondary).textSelection(.enabled) }
+                                buttonRow(passwordCopied ? "Пароль скопирован" : "Скопировать пароль", "doc.on.doc") {
+                                    Clipboard.copy(sharePassword); passwordCopied = true
+                                }
+                                buttonRow("Сменить пароль", "arrow.triangle.2.circlepath") { sharePassword = LANSharing.regenerate(); passwordCopied = false }
+                            }
+                        }
+                        .appear(2)
                         ListSection(title: "Обновления", footer: updateFooter) {
                             toggleRow("Проверять автоматически", $autoUpdateCheck)
                             buttonRow(updateTitle, "arrow.down.circle") { updateAction() }
@@ -110,6 +129,7 @@ struct SettingsView: View {
                         #endif
                         ListSection(footer: transferNote ?? "Серверы и ссылки подписок в файл не попадают: в них секреты.") {
                             buttonRow("История подключений", "clock.arrow.circlepath") { showHistory = true }
+                            buttonRow("Что нового", "sparkles") { showNews = true }
                             #if os(macOS)
                             buttonRow("Экспорт настроек и маршрутов", "square.and.arrow.up") { exportSettings() }
                             buttonRow("Импорт настроек и маршрутов", "square.and.arrow.down") { importSettings() }
@@ -145,6 +165,7 @@ struct SettingsView: View {
             }
             #if os(macOS)
             .sheet(isPresented: $showHistory) { HistoryView() }
+            .sheet(isPresented: $showNews) { WhatsNewView() }
             .sheet(isPresented: $showDiagnostics) { DiagnosticsView(vpn: vpn, server: nil) }
             #endif
         }

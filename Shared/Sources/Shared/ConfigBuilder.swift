@@ -21,7 +21,7 @@ public enum ConfigBuilder {
     ///   - bundledRuleSets: folder with `<tag>.srs` snapshots, used until the first successful download.
     ///   - controller: enables the local control API.
     public static func build(_ server: ServerConfig, servers: [ServerConfig] = [], routing: RoutingSettings = RoutingSettings(),
-                             bundledRuleSets: String? = nil, controller: Controller? = nil) throws -> String {
+                             bundledRuleSets: String? = nil, controller: Controller? = nil, share: LANShare? = nil) throws -> String {
         var routeRules: [[String: Any]] = [
             ["action": "sniff"],
             ["protocol": "dns", "action": "hijack-dns"],
@@ -103,6 +103,16 @@ public enum ConfigBuilder {
             "outbounds": try proxyOutbounds(selected: server, others: servers) + [["type": "direct", "tag": "direct"]],
             "route": route,
         ]
+        if let share, share.isSafe, var inbounds = config["inbounds"] as? [[String: Any]] {
+            inbounds.append([
+                "type": "mixed", // HTTP and SOCKS5 on one port
+                "tag": "lan-in",
+                "listen": "0.0.0.0",
+                "listen_port": share.port,
+                "users": [["username": share.username, "password": share.password]],
+            ])
+            config["inbounds"] = inbounds
+        }
         var experimental: [String: Any] = [:]
         // Keeps downloaded rule-sets between launches, so a failed update falls back to the last good copy.
         if !ruleSets.isEmpty { experimental["cache_file"] = ["enabled": true] }

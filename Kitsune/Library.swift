@@ -238,6 +238,7 @@ final class Library {
 
     private func record(_ id: String, _ ms: Int) {
         pingHistory[id] = Array((pingHistory[id] ?? []).suffix(23) + [ms])
+        PingStats.record(id, ms)
     }
 
     /// Real round trip through the running tunnel for the selected server: one tiny request, so it is cheap enough to repeat.

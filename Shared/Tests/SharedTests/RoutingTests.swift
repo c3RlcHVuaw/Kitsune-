@@ -120,3 +120,20 @@ private func routeOutbounds(_ routing: RoutingSettings) throws -> [String] {
     let old = try JSONDecoder().decode(RoutingSettings.self, from: Data(#"{"profile":"russiaDirect","direct":[],"proxy":[]}"#.utf8))
     #expect(old.appServers.isEmpty)
 }
+
+@Test func lanShareAddsAnAuthenticatedInboundOnlyWhenSafe() throws {
+    let server = try ProxyLink.parse(sampleLink)
+    func inbounds(_ share: LANShare?) throws -> [[String: Any]] {
+        let json = try ConfigBuilder.build(server, share: share)
+        let config = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        return try #require(config["inbounds"] as? [[String: Any]])
+    }
+    #expect(try inbounds(nil).count == 1)
+    #expect(try inbounds(LANShare(port: 7890, username: "kitsune", password: "short")).count == 1) // weak password: no proxy
+    let open = try inbounds(LANShare(port: 7890, username: "kitsune", password: "correct-horse-battery"))
+    #expect(open.count == 2)
+    let lan = try #require(open.last)
+    #expect(lan["type"] as? String == "mixed")
+    #expect(lan["listen_port"] as? Int == 7890)
+    #expect((lan["users"] as? [[String: String]])?.first?["password"] == "correct-horse-battery")
+}

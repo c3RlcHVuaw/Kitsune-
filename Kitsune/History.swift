@@ -2,20 +2,20 @@ import Foundation
 
 /// Finished connections (server, when, how long, how much traffic), newest last, kept to the last 200.
 @MainActor enum History {
-    struct Session: Codable, Identifiable { var id = UUID(); let server: String; let start: Date; var end: Date; var down: Int64; var up: Int64
+    struct Session: Codable, Identifiable { var id = UUID(); let server: String; var country: String? = nil; let start: Date; var end: Date; var down: Int64; var up: Int64
         var duration: TimeInterval { end.timeIntervalSince(start) } }
 
     private static let key = "connectionHistory"
-    private static var current: (server: String, start: Date)?
+    private static var current: (server: String, country: String?, start: Date)?
     static var sessions: [Session] = (UserDefaults.standard.data(forKey: key)).flatMap { try? JSONDecoder().decode([Session].self, from: $0) } ?? []
 
-    static func begin(server: String) { if current == nil { current = (server, .now) } }
+    static func begin(server: String, country: String? = nil) { if current == nil { current = (server, country, .now) } }
 
     static func end(down: Int64, up: Int64) {
         guard let current else { return }
         self.current = nil
         guard Date.now.timeIntervalSince(current.start) >= 5 else { return } // failed attempts aren't history
-        sessions = Array((sessions + [Session(server: current.server, start: current.start, end: .now, down: down, up: up)]).suffix(200))
+        sessions = Array((sessions + [Session(server: current.server, country: current.country, start: current.start, end: .now, down: down, up: up)]).suffix(200))
         UserDefaults.standard.set(try? JSONEncoder().encode(sessions), forKey: key)
     }
 
@@ -37,6 +37,16 @@ import Foundation
         if s >= 7 { return (L("Тихая лиса"), String(format: L("До «Лиса-хранителя» ещё %lld дн. подряд"), 30 - s)) }
         if sessions.count >= 5 { return (L("Любопытная лиса"), String(format: L("До «Тихой лисы» ещё %lld дн. подряд"), 7 - s)) }
         return (L("Лисёнок"), L("Подключайтесь каждый день, и звание вырастет."))
+    }
+
+    /// Small achievements shown next to the rank: (icon, title, hint).
+    static var badges: [(icon: String, title: String)] {
+        var result: [(String, String)] = []
+        let cal = Calendar.current
+        if sessions.contains(where: { (2..<6).contains(cal.component(.hour, from: $0.start)) }) { result.append(("moon.stars.fill", L("Ночная сова"))) }
+        if Set(sessions.compactMap(\.country)).count >= 5 { result.append(("airplane", L("Путешественник"))) }
+        if sessions.contains(where: { $0.duration >= 86_400 }) { result.append(("flame.fill", L("Марафонец"))) }
+        return result
     }
 
     static func clear() { sessions = []; UserDefaults.standard.removeObject(forKey: key) }

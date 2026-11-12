@@ -204,7 +204,12 @@ final class VPNManager {
     }
 
     fileprivate static func config(_ server: ServerConfig, servers: [ServerConfig], routing: RoutingSettings) throws -> String {
-        try ConfigBuilder.build(server, servers: servers, routing: routing, bundledRuleSets: bundledRuleSets, controller: controller)
+        #if os(macOS)
+        let share = LANSharing.current
+        #else
+        let share: LANShare? = nil
+        #endif
+        return try ConfigBuilder.build(server, servers: servers, routing: routing, bundledRuleSets: bundledRuleSets, controller: controller, share: share)
     }
 
     /// Local control API of sing-box inside the extension. The secret persists so the API keeps working after an app relaunch.
