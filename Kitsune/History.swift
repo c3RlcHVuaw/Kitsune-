@@ -19,5 +19,25 @@ import Foundation
         UserDefaults.standard.set(try? JSONEncoder().encode(sessions), forKey: key)
     }
 
+    /// Consecutive days with at least one connection, counting back from today (or yesterday, if today has none yet).
+    static var streak: Int {
+        let cal = Calendar.current
+        let days = Set(sessions.map { cal.startOfDay(for: $0.start) })
+        var day = cal.startOfDay(for: .now)
+        if !days.contains(day), let yesterday = cal.date(byAdding: .day, value: -1, to: day) { day = yesterday }
+        var count = 0
+        while days.contains(day), let previous = cal.date(byAdding: .day, value: -1, to: day) { count += 1; day = previous }
+        return count
+    }
+
+    /// A playful title for how long and how regularly the app has been used, plus a hint about the next one.
+    static var rank: (title: String, hint: String) {
+        let s = streak
+        if s >= 30 { return (L("Лис-хранитель"), L("Больше месяца подряд. Выше только небо.")) }
+        if s >= 7 { return (L("Тихая лиса"), String(format: L("До «Лиса-хранителя» ещё %lld дн. подряд"), 30 - s)) }
+        if sessions.count >= 5 { return (L("Любопытная лиса"), String(format: L("До «Тихой лисы» ещё %lld дн. подряд"), 7 - s)) }
+        return (L("Лисёнок"), L("Подключайтесь каждый день, и звание вырастет."))
+    }
+
     static func clear() { sessions = []; UserDefaults.standard.removeObject(forKey: key) }
 }

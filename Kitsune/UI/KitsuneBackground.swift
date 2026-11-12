@@ -9,13 +9,15 @@ struct KitsuneBackground: View {
     /// False on tabs that aren't on screen: their glow stops animating (and costing GPU) until they are shown.
     var active = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("buttonTheme") private var themeRaw = "copper"
 
     var body: some View {
         // Always dark; only the edge light changes: dim and still at rest, alive when the tunnel is busy or up, red on error.
         FlowingGradient(animated: !reduceMotion && mood != .error,
                         paused: !active,
                         intensity: intensity,
-                        alarm: mood == .error)
+                        alarm: mood == .error,
+                        theme: ButtonTheme(rawValue: themeRaw) ?? .copper)
             .ignoresSafeArea()
             .animation(.easeInOut(duration: 1.1), value: mood)
     }
@@ -37,8 +39,9 @@ private struct FlowingGradient: View {
     let paused: Bool
     var intensity = 1.0
     var alarm = false
+    var theme = ButtonTheme.copper
 
-    private var tint: Color { alarm ? Color(red: 0.75, green: 0.16, blue: 0.16) : Color(red: 0.85, green: 0.42, blue: 0.18) }
+    private var tint: Color { alarm ? Color(red: 0.75, green: 0.16, blue: 0.16) : theme.glow }
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 20, paused: !animated || paused)) { context in

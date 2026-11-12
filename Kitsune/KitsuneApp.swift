@@ -9,6 +9,8 @@ struct KitsuneApp: App {
     @State private var tab = AppTab.home
     @AppStorage("autoConnect") private var autoConnect = false
     @AppStorage("showMenuBar") private var showMenuBar = true
+    @AppStorage("buttonTheme") private var themeRaw = "copper"
+    private var theme: ButtonTheme { ButtonTheme(rawValue: themeRaw) ?? .copper }
 
     init() {
         BrandFont.register()
@@ -25,11 +27,26 @@ struct KitsuneApp: App {
                 if new == .connected { History.begin(server: library.selected?.displayName ?? "") }
                 else if new == .disconnected || new == .invalid { History.end(down: vpn.downTotal, up: vpn.upTotal) }
                 #if os(macOS)
-                DockBadge.update(connected: new == .connected)
+                DockBadge.update(connected: new == .connected, theme: theme)
                 #endif
+            }
+            .onChange(of: themeRaw) { _, _ in
+                #if os(macOS)
+                DockBadge.update(connected: vpn.status == .connected, theme: theme)
+                #endif
+            }
+            .task(id: vpn.status == .connected) {
+                // A live latency sample every few seconds while the tunnel is up: feeds the ping ring and the server graph.
+                guard vpn.status == .connected else { return }
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(4))
+                    await library.sampleActive()
+                    try? await Task.sleep(for: .seconds(6))
+                }
             }
             #if os(macOS)
             .task {
+                DockBadge.update(connected: vpn.status == .connected, theme: theme)
                 Hotkey.action = { Task { await vpn.toggle(library: library) } }
                 Hotkey.set(enabled: UserDefaults.standard.object(forKey: "globalHotkey") as? Bool ?? true)
             }
@@ -64,7 +81,7 @@ struct KitsuneApp: App {
         MenuBarExtra(isInserted: $showMenuBar) {
             MenuBarContent(vpn: vpn, library: library, autoConnect: $autoConnect)
         } label: {
-            Image(systemName: vpn.status == .connected ? "shield.lefthalf.filled" : "shield.slash")
+            Image(nsImage: DockBadge.menuIcon(connected: vpn.status == .connected, theme: theme))
         }
         #else
         WindowGroup { root }

@@ -14,9 +14,24 @@ struct HomeView: View {
     #if os(macOS)
     @State private var showDiagnostics = false
     @AppStorage("sounds") private var sounds = true
+    @AppStorage("haptics") private var haptics = true
     #endif
 
+    @AppStorage("buttonTheme") private var themeRaw = "copper"
+    @AppStorage("winterMode") private var winterMode = true
+
+    private var theme: ButtonTheme { ButtonTheme(rawValue: themeRaw) ?? .copper }
     private var server: ServerConfig? { library.selected }
+
+    /// Ring colour follows the real latency through the tunnel: theme colour is fine, amber so-so, red bad.
+    private var ringColor: Color {
+        guard vpn.status == .connected, let server, let ping = library.pings[server.id] else { return theme.accent }
+        switch ping {
+        case .tunnel(let ms): return ms < 600 ? theme.accent : ms < 1500 ? Color(red: 1.0, green: 0.80, blue: 0.25) : Color(red: 0.92, green: 0.22, blue: 0.22)
+        case .failed: return Color(red: 0.92, green: 0.22, blue: 0.22)
+        default: return theme.accent
+        }
+    }
     private var hasError: Bool { vpn.lastError != nil && !vpn.status.isActive }
 
     var body: some View {
@@ -41,11 +56,12 @@ struct HomeView: View {
                 ClipboardOffer(library: library).padding(.top, 10)
                 #endif
                 Spacer(minLength: 16)
-                ConnectButton(status: vpn.status, action: toggle)
+                ConnectButton(status: vpn.status, theme: theme, ring: ringColor, winter: winterMode && Snow.isSeason, error: hasError, action: toggle)
                 StatusCaption(status: vpn.status, hasError: hasError, server: server, connectedDate: vpn.connectedDate) {
                     tab = .servers
                 }
                 .padding(.top, 28)
+                if vpn.status == .connected, !hasError { LiveLine(vpn: vpn, library: library, server: server).padding(.top, 6) }
                 Group {
                     if let error = vpn.lastError, hasError {
                         Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -59,7 +75,7 @@ struct HomeView: View {
                         GlassEffectContainer(spacing: 12) {
                             VStack(spacing: 12) {
                                 ConnectionInfo(server: server).appear(0)
-                                SpeedRow(vpn: vpn).appear(1)
+                                SpeedRow(vpn: vpn, accent: theme.accent).appear(1)
                             }
                         }
                     }
@@ -86,6 +102,12 @@ struct HomeView: View {
         #if os(macOS)
         .onChange(of: vpn.status) { old, new in
             // Soft system sounds on connect and on a user-driven disconnect.
+            if haptics {
+                // A quiet click on connect, a firmer one when the tunnel drops by itself (only felt while a finger is on the trackpad).
+                let performer = NSHapticFeedbackManager.defaultPerformer
+                if new == .connected { performer.perform(.alignment, performanceTime: .now) }
+                else if new == .disconnected, old != .disconnecting { performer.perform(.levelChange, performanceTime: .now) }
+            }
             guard sounds else { return }
             if new == .connected { NSSound(named: "Glass")?.play() }
             else if new == .disconnected, old == .disconnecting { NSSound(named: "Pop")?.play() }
@@ -110,12 +132,18 @@ struct HomeView: View {
 /// Dark glass disc with the fox; a copper ring spins while busy and closes when connected, the disc fills with copper.
 private struct ConnectButton: View {
     let status: NEVPNStatus
+    let theme: ButtonTheme
+    let ring: Color
+    let winter: Bool
+    let error: Bool
     var action: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var spin = false
+    @State private var burst: Date?
+    @State private var sway: CGFloat = 0
 
-    private let copper = Color(red: 1.0, green: 0.50, blue: 0.10)
+    private var copper: Color { theme.accent }
     private var busy: Bool { status == .connecting || status == .disconnecting || status == .reasserting }
     private var connected: Bool { status == .connected }
 
@@ -131,9 +159,10 @@ private struct ConnectButton: View {
                 }
                 Circle()
                     .trim(from: 0, to: connected ? 1 : busy ? 0.3 : 0)
-                    .stroke(copper, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .stroke(ring, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
                     .rotationEffect(.degrees(spin ? 360 : 0))
                     .padding(-14)
+                    .animation(.smooth(duration: 0.8), value: ring)
                 Circle()
                     .fill(connected
                           ? AnyShapeStyle(copper.opacity(0.18))
@@ -143,13 +172,17 @@ private struct ConnectButton: View {
                     .shadow(color: .black.opacity(0.5), radius: 18, y: 10)
                     .glassEffect(connected ? .regular.tint(copper.opacity(0.45)) : .regular, in: .circle)
                     .animation(.smooth(duration: 0.8), value: status)
-                FoxMark(color: connected ? .white : Color(red: 0.96, green: 0.80, blue: 0.62))
+                FoxMark(color: connected ? .white : theme.soft, droop: error ? 1 : 0, sway: sway)
+                    .animation(.smooth(duration: 0.5), value: error)
                     .frame(width: 88)
                     .offset(y: 4)
                     .phaseAnimator([false, true], trigger: connected) { view, phase in
                         view.offset(y: phase && connected && !reduceMotion ? -8 : 0)
                     } animation: { _ in .spring(duration: 0.35, bounce: 0.5) }
             }
+            .overlay { if winter { SnowCap().padding(1) } }
+            .overlay { if winter { Snow().frame(width: 260, height: 300) } }
+            .overlay { SparkBurst(start: burst, colors: [theme.accent, theme.soft, .white]).frame(width: 420, height: 420) }
             .frame(width: 200, height: 200)
             .contentShape(.circle)
             .phaseAnimator(!busy && !connected && !reduceMotion ? [1.0, 1.035] : [1.0]) { view, scale in
@@ -157,6 +190,17 @@ private struct ConnectButton: View {
             } animation: { _ in .easeInOut(duration: 1.8) }
         }
         .buttonStyle(PressScale())
+        .onChange(of: connected) { _, isConnected in
+            guard isConnected, !reduceMotion else { return }
+            burst = .now
+            // The ears wiggle a few times: the fox is happy.
+            Task {
+                for lean in [1, -1, 0.8, -0.8, 0.5, -0.5, 0] as [CGFloat] {
+                    withAnimation(.easeInOut(duration: 0.11)) { sway = lean }
+                    try? await Task.sleep(for: .milliseconds(110))
+                }
+            }
+        }
         .onChange(of: busy, initial: true) { _, isBusy in
             guard !reduceMotion else { return }
             if isBusy {
@@ -275,7 +319,7 @@ private struct ConnectionInfo: View {
                     Task { try? await Task.sleep(for: .seconds(1.6)); withAnimation(.smooth) { copied = false } }
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(exit.ip).font(.headline.monospacedDigit())
+                        Text(exit.ip).font(.headline.monospacedDigit()).contentTransition(.numericText()).animation(.smooth(duration: 0.9), value: exit.ip)
                         Label(copied ? L("Скопировано") : (Locale.current.localizedString(forRegionCode: exit.country) ?? exit.country),
                               systemImage: copied ? "checkmark" : "doc.on.doc")
                             .labelStyle(.titleAndIcon)
@@ -306,13 +350,12 @@ private struct ConnectionInfo: View {
     }
 
     private func lookup() async {
-        exit = nil
-        failed = false
+        failed = false // the old address stays until the new one arrives, so the digits roll
         // Right after connecting the routes are still switching: a hard 6 s cap per try, a second service, a few retries.
         for attempt in 0..<4 {
             for endpoint in Self.endpoints {
                 if let found = await Self.fetch(endpoint) {
-                    exit = found
+                    withAnimation(.smooth(duration: 0.9)) { exit = found }
                     return
                 }
                 if Task.isCancelled { return }
@@ -351,12 +394,66 @@ private struct ConnectionInfo: View {
     }
 }
 
+// MARK: - Live line
+
+/// One quiet line under the status that cycles: exit country, routing profile, current speed, time protected today.
+private struct LiveLine: View {
+    let vpn: VPNManager
+    let library: Library
+    let server: ServerConfig?
+    @State private var index = 0
+
+    private var lines: [String] {
+        var result: [String] = []
+        if let code = countryCode, let name = Locale.current.localizedString(forRegionCode: code) { result.append(String(format: L("Выход: %@"), name)) }
+        let profile = switch library.routing.profile {
+        case .russiaDirect: L("Россия напрямую")
+        case .allVPN: L("Весь трафик через VPN")
+        case .custom: L("Свои правила")
+        }
+        result.append(profile)
+        result.append(String(format: L("Скорость %@"), ByteCountFormatter.string(fromByteCount: vpn.downRate + vpn.upRate, countStyle: .binary) + L("/с")))
+        result.append(String(format: L("Сегодня под защитой: %@"), todayText))
+        return result
+    }
+
+    private var countryCode: String? {
+        guard let flag = server?.flag else { return nil }
+        let letters = flag.unicodeScalars.compactMap { Unicode.Scalar($0.value - 0x1F1A5) }.map { String($0) }.joined()
+        return letters.count == 2 ? letters : nil
+    }
+
+    private var todayText: String {
+        let start = Calendar.current.startOfDay(for: .now)
+        var seconds = History.sessions.filter { $0.start >= start }.reduce(0) { $0 + $1.duration }
+        if let date = vpn.connectedDate { seconds += Date.now.timeIntervalSince(max(date, start)) }
+        let s = Int(seconds), h = s / 3600, m = s % 3600 / 60
+        return h > 0 ? String(format: L("%lld ч %lld мин"), h, m) : String(format: L("%lld мин"), max(m, 1))
+    }
+
+    var body: some View {
+        let all = lines
+        Text(all[index % all.count])
+            .font(.footnote)
+            .foregroundStyle(.white.opacity(0.6))
+            .id(index % all.count)
+            .transition(.blurReplace)
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(4))
+                    withAnimation(.smooth(duration: 0.6)) { index += 1 }
+                }
+            }
+    }
+}
+
 // MARK: - Live speed
 
 /// Live speed: rolling down/up rates on top, a 60-second area chart below, session totals at the bottom.
 private struct SpeedRow: View {
     let vpn: VPNManager
-    private let down = Color(red: 1.0, green: 0.55, blue: 0.16)
+    let accent: Color
+    private var down: Color { accent }
     private let up = Color.white
 
     private struct Point: Identifiable { let id: Int; let down: Double; let up: Double }
@@ -381,7 +478,7 @@ private struct SpeedRow: View {
                 rate("arrow.up", vpn.upRate, up)
             }
             ZStack {
-            IdleWave(strength: max(0.3, 1 - Double(recent) / 400_000)).frame(height: 70)
+            IdleWave(strength: max(0.3, 1 - Double(recent) / 400_000), accent: accent).frame(height: 70)
             Chart(points) { p in
                 AreaMark(x: .value("t", p.id), y: .value("down", p.down), series: .value("s", "down"))
                     .interpolationMethod(.catmullRom)
@@ -430,13 +527,14 @@ private struct SpeedRow: View {
 /// Calm placeholder while the tunnel is quiet: two slow glowing waves that fade out as real traffic appears.
 private struct IdleWave: View {
     let strength: Double
+    let accent: Color
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 20, paused: reduceMotion || strength < 0.02)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             Canvas { ctx, size in
-                for (index, color) in [Color(red: 1.0, green: 0.55, blue: 0.16), Color.white].enumerated() {
+                for (index, color) in [accent, Color.white].enumerated() {
                     var line = Path()
                     let k = Double(index)
                     for x in stride(from: 0.0, through: size.width, by: 3) {

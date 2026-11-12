@@ -283,7 +283,7 @@ private struct ServerRows: View {
         // Lazy: a subscription can hold dozens of servers, and building every row at once made the tab stutter.
         LazyVStack(spacing: 0) {
             ForEach(ordered) { server in
-                ServerRow(server: server, selected: library.selected?.id == server.id, ping: library.pings[server.id]) {
+                ServerRow(server: server, selected: library.selected?.id == server.id, ping: library.pings[server.id], history: library.pingHistory[server.id] ?? []) {
                     withAnimation(.smooth(duration: 0.25)) { library.selectedID = server.id }
                 }
                 .contextMenu {
@@ -305,6 +305,7 @@ private struct ServerRow: View {
     let server: ServerConfig
     let selected: Bool
     let ping: Ping?
+    var history: [Int] = []
     var onSelect: () -> Void
 
     var body: some View {
@@ -324,6 +325,7 @@ private struct ServerRow: View {
                     Text(server.summary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer(minLength: 8)
+                if selected, history.count >= 3 { PingSpark(values: history, color: PingLabel.color(for: ping)).transition(.opacity) }
                 PingLabel(ping: ping)
                 Image(systemName: "checkmark")
                     .font(.subheadline.weight(.semibold))
@@ -342,32 +344,71 @@ private struct ServerRow: View {
     }
 }
 
+/// Signal-strength style bars: how good the connection to the server is, in colour instead of digits.
 private struct PingLabel: View {
     let ping: Ping?
+
+    /// 1 (bad) ... 4 (excellent). A full request through the server is slower than a handshake, so the scales differ.
+    static func level(for ping: Ping?) -> Int? {
+        switch ping {
+        case .tunnel(let ms): ms < 250 ? 4 : ms < 600 ? 3 : ms < 1500 ? 2 : 1
+        case .ms(let ms): ms < 80 ? 4 : ms < 150 ? 3 : ms < 400 ? 2 : 1
+        case .failed: 0
+        default: nil
+        }
+    }
+
+    static func color(for ping: Ping?) -> Color {
+        switch level(for: ping) {
+        case 4: Color(red: 0.35, green: 0.85, blue: 0.50)
+        case 3: Color(red: 0.70, green: 0.86, blue: 0.32)
+        case 2: Color(red: 1.0, green: 0.70, blue: 0.20)
+        default: Color.alert
+        }
+    }
 
     var body: some View {
         switch ping {
         case .none, .unavailable: EmptyView()
         case .measuring: ProgressView().controlSize(.mini).tint(.white)
-        case .ms(let ms):
-            label(ms, quality: ms < 150 ? 1 : ms < 400 ? 0.66 : 0.33)
-        case .tunnel(let ms):
-            // A full request through the server takes longer than a handshake, so the scale is wider.
-            label(ms, quality: ms < 600 ? 1 : ms < 1500 ? 0.66 : 0.33)
         case .failed:
-            Label("нет связи", systemImage: "exclamationmark.triangle.fill")
-                .font(.caption)
-                .foregroundStyle(Color.alert)
+            Image(systemName: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(Color.alert).help("нет связи")
+        case .ms(let ms), .tunnel(let ms):
+            let level = Self.level(for: ping) ?? 1
+            HStack(alignment: .bottom, spacing: 2.5) {
+                ForEach(1...4, id: \.self) { bar in
+                    Capsule()
+                        .fill(bar <= level ? Self.color(for: ping) : .white.opacity(0.14))
+                        .frame(width: 4, height: CGFloat(4 + bar * 3))
+                }
+            }
+            .frame(height: 16)
+            .animation(.smooth, value: level)
+            .help(String(format: L("%lld мс"), ms))
         }
     }
+}
 
-    private func label(_ ms: Int, quality: Double) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: "cellularbars", variableValue: quality)
-            Text(String(format: L("%lld мс"), ms)).monospacedDigit().contentTransition(.numericText())
+/// Last measurements of the active server as a tiny line.
+private struct PingSpark: View {
+    let values: [Int]
+    let color: Color
+
+    var body: some View {
+        GeometryReader { proxy in
+            let low = Double(values.min() ?? 0), high = Double(values.max() ?? 1)
+            let span = max(high - low, 20)
+            let step = proxy.size.width / CGFloat(max(values.count - 1, 1))
+            Path { path in
+                for (index, value) in values.enumerated() {
+                    let point = CGPoint(x: CGFloat(index) * step, y: proxy.size.height * (1 - CGFloat((Double(value) - low) / span)) * 0.8 + proxy.size.height * 0.1)
+                    if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+                }
+            }
+            .stroke(color.opacity(0.9), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
         }
-        .font(.caption)
-        .animation(.smooth, value: ms)
+        .frame(width: 44, height: 16)
+        .accessibilityHidden(true)
     }
 }
 

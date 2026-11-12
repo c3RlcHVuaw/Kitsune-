@@ -44,6 +44,8 @@ final class Library {
     private(set) var manual: [ServerConfig] = []
     private(set) var updating: Set<UUID> = []
     private(set) var pings: [String: Ping] = [:]
+    /// Last measurements per server (milliseconds, oldest first), for the mini graph.
+    private(set) var pingHistory: [String: [Int]] = [:]
     var selectedID: String? { didSet { UserDefaults.standard.set(selectedID, forKey: "selectedServer") } }
     var routing: RoutingSettings { didSet { saveRouting() } }
     /// Set by the root view; used to measure through the running tunnel.
@@ -215,6 +217,7 @@ final class Library {
         let delays = await vpn?.tunnelDelays()
         for server in servers {
             pings[server.id] = delays?[server.id].map(Ping.tunnel) ?? .failed
+            if let ms = delays?[server.id] { record(server.id, ms) }
         }
     }
 
@@ -228,8 +231,25 @@ final class Library {
             }
             for await (id, ms) in group {
                 pings[id] = ms.map(Ping.ms) ?? .failed
+                if let ms { record(id, ms) }
             }
         }
+    }
+
+    private func record(_ id: String, _ ms: Int) {
+        pingHistory[id] = Array((pingHistory[id] ?? []).suffix(23) + [ms])
+    }
+
+    /// Real round trip through the running tunnel for the selected server: one tiny request, so it is cheap enough to repeat.
+    func sampleActive() async {
+        guard vpn?.status == .connected, let id = selected?.id else { return }
+        var request = URLRequest(url: URL(string: "https://www.gstatic.com/generate_204")!, timeoutInterval: 5)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        let start = ContinuousClock.now
+        let ok = (try? await URLSession.shared.data(for: request)) != nil
+        let elapsed = start.duration(to: .now).components
+        let ms = Int(elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000)
+        if ok { pings[id] = .tunnel(ms); record(id, ms) } else { pings[id] = .failed }
     }
 
     /// Picks the server with the lowest ping among those measured.

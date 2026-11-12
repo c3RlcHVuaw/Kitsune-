@@ -130,3 +130,108 @@ struct ListRow<Content: View>: View {
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
     }
 }
+
+/// Colour of the connect button, its ring, the home glow and the speed chart.
+enum ButtonTheme: String, CaseIterable {
+    case copper, moon, neon
+
+    var accent: Color {
+        switch self {
+        case .copper: Color(red: 1.0, green: 0.50, blue: 0.10)
+        case .moon: Color(red: 0.55, green: 0.70, blue: 1.0)
+        case .neon: Color(red: 0.12, green: 0.95, blue: 0.62)
+        }
+    }
+
+    /// The idle fox and soft highlights.
+    var soft: Color {
+        switch self {
+        case .copper: Color(red: 0.96, green: 0.80, blue: 0.62)
+        case .moon: Color(red: 0.84, green: 0.90, blue: 1.0)
+        case .neon: Color(red: 0.74, green: 1.0, blue: 0.90)
+        }
+    }
+
+    /// Slightly deeper tone for the background glow.
+    var glow: Color {
+        switch self {
+        case .copper: Color(red: 0.85, green: 0.42, blue: 0.18)
+        case .moon: Color(red: 0.40, green: 0.52, blue: 0.92)
+        case .neon: Color(red: 0.08, green: 0.75, blue: 0.50)
+        }
+    }
+
+    var title: LocalizedStringKey {
+        switch self { case .copper: "Медь"; case .moon: "Луна"; case .neon: "Неон" }
+    }
+}
+
+/// A short burst of sparks from the middle of the connect button.
+struct SparkBurst: View {
+    let start: Date?
+    let colors: [Color]
+    private let duration = 2.2
+
+    var body: some View {
+        if let start {
+            TimelineView(.animation) { context in
+                let t = context.date.timeIntervalSince(start)
+                Canvas { ctx, size in
+                    guard t >= 0, t < duration else { return }
+                    let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                    let progress = t / duration
+                    let eased = 1 - pow(1 - progress, 3)
+                    for i in 0..<40 {
+                        let angle = Double(i) * 2.399963 // golden angle: an even fan
+                        let speed = 70.0 + Double((i * 37) % 90)
+                        let x = center.x + cos(angle) * speed * eased
+                        let y = center.y + sin(angle) * speed * eased + 40 * progress * progress
+                        let r = 1.5 + Double(i % 3)
+                        ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
+                                 with: .color(colors[i % colors.count].opacity((1 - progress) * 0.9)))
+                    }
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+}
+
+/// Snowfall plus a snow cap on the connect button: December to mid-January.
+struct Snow: View {
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            Canvas { ctx, size in
+                for i in 0..<36 {
+                    let speed = 14.0 + Double((i * 7) % 16)
+                    let x = Double((i * 53) % 100) / 100 * size.width + sin(t * 0.7 + Double(i)) * 8
+                    let y = (t * speed + Double(i * 41)).truncatingRemainder(dividingBy: size.height + 20) - 10
+                    let r = 1.2 + Double(i % 3) * 0.7
+                    ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)), with: .color(.white.opacity(0.35 + Double(i % 4) * 0.12)))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    static var isSeason: Bool {
+        if UserDefaults.standard.bool(forKey: "winterPreview") { return true }
+        let c = Calendar.current.dateComponents([.month, .day], from: .now)
+        return c.month == 12 || (c.month == 1 && (c.day ?? 99) <= 15)
+    }
+}
+
+/// Soft white cap along the top edge of the disc.
+struct SnowCap: View {
+    var body: some View {
+        Circle()
+            .trim(from: 0.63, to: 0.87)
+            .stroke(LinearGradient(colors: [.white, .white.opacity(0.85)], startPoint: .top, endPoint: .bottom),
+                    style: StrokeStyle(lineWidth: 9, lineCap: .round))
+            .shadow(color: .white.opacity(0.35), radius: 6)
+            .accessibilityHidden(true)
+    }
+}

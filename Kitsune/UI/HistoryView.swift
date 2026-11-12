@@ -111,6 +111,16 @@ struct HistoryView: View {
                 stat("Отдача", bytes(up))
             }
             .padding(.horizontal, 4)
+            let rank = History.rank
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles").foregroundStyle(accent)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(rank.title).font(.subheadline.weight(.medium))
+                    Text(rank.hint).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 4)
         }
         .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 24))

@@ -11,6 +11,11 @@ struct SettingsView: View {
     let vpn: VPNManager
     let library: Library
     @State private var showHistory = false
+    @AppStorage("buttonTheme") private var themeRaw = "copper"
+    @AppStorage("winterMode") private var winterMode = true
+    #if os(macOS)
+    @AppStorage("haptics") private var haptics = true
+    #endif
     @State private var transferNote: LocalizedStringKey?
     @AppStorage("onboardingDone") private var onboardingDone = true
     @State private var week = TrafficStats.last(7)
@@ -42,6 +47,28 @@ struct SettingsView: View {
                         ListSection(title: "Проверка утечек", footer: leakFooter) {
                             leakRows
                             buttonRow("Проверить сейчас", "checkmark.shield") { Task { await leak.run() } }
+                        }
+                        .appear(1)
+                        ListSection(title: "Оформление", footer: "Снег на кнопке идёт с декабря до середины января.") {
+                            ListRow {
+                                Text("Цвет кнопки")
+                                Spacer()
+                                HStack(spacing: 12) {
+                                    ForEach(ButtonTheme.allCases, id: \.self) { theme in
+                                        Button { withAnimation(.smooth) { themeRaw = theme.rawValue } } label: {
+                                            Circle().fill(theme.accent).frame(width: 22, height: 22)
+                                                .overlay(Circle().stroke(.white, lineWidth: themeRaw == theme.rawValue ? 2 : 0).padding(-4))
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help(theme.title)
+                                        .accessibilityLabel(theme.title)
+                                    }
+                                }
+                            }
+                            toggleRow("Зимнее оформление", $winterMode)
+                            #if os(macOS)
+                            toggleRow("Тактильный отклик", $haptics)
+                            #endif
                         }
                         .appear(1)
                         #if os(macOS)
