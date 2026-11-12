@@ -135,6 +135,17 @@ struct HomeView: View {
     }
 
     private func toggle() {
+        #if os(macOS)
+        // Control-click while connected: copy the exit IP instead of disconnecting.
+        if vpn.status == .connected, NSEvent.modifierFlags.contains(.control) {
+            Task {
+                guard let ip = await LeakCheck.probe()?.ip else { return }
+                Clipboard.copy(ip)
+                NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .default)
+            }
+            return
+        }
+        #endif
         if vpn.status.isActive {
             vpn.disconnect()
         } else if let server {
@@ -470,6 +481,7 @@ private struct LiveLine: View {
 
     private var lines: [String] {
         var result: [String] = []
+        if let days = History.comeback { result.append(String(format: L("С возвращением! Не виделись %lld дн."), days)) }
         if let code = server?.countryCode, let name = Locale.current.localizedString(forRegionCode: code) { result.append(String(format: L("Выход: %@"), name)) }
         let profile = switch library.routing.profile {
         case .russiaDirect: L("Россия напрямую")

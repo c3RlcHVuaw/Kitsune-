@@ -9,11 +9,22 @@ import Foundation
     private static var current: (server: String, country: String?, start: Date)?
     static var sessions: [Session] = (UserDefaults.standard.data(forKey: key)).flatMap { try? JSONDecoder().decode([Session].self, from: $0) } ?? []
 
-    static func begin(server: String, country: String? = nil) { if current == nil { current = (server, country, .now) } }
+    /// Whole days since the previous connection, when it was a week or more ago; the home screen greets the comeback.
+    private(set) static var comeback: Int?
+
+    static func begin(server: String, country: String? = nil) {
+        guard current == nil else { return }
+        current = (server, country, .now)
+        let days = sessions.last.map { Calendar.current.dateComponents([.day], from: $0.end, to: .now).day ?? 0 } ?? 0
+        comeback = days >= 7 ? days : nil
+    }
+
+    static var totalHours: Int { Int(sessions.reduce(0) { $0 + $1.duration } / 3600) }
 
     static func end(down: Int64, up: Int64) {
         guard let current else { return }
         self.current = nil
+        comeback = nil
         guard Date.now.timeIntervalSince(current.start) >= 5 else { return } // failed attempts aren't history
         sessions = Array((sessions + [Session(server: current.server, country: current.country, start: current.start, end: .now, down: down, up: up)]).suffix(200))
         UserDefaults.standard.set(try? JSONEncoder().encode(sessions), forKey: key)
@@ -33,7 +44,8 @@ import Foundation
     /// A playful title for how long and how regularly the app has been used, plus a hint about the next one.
     static var rank: (title: String, hint: String) {
         let s = streak
-        if s >= 30 { return (L("Лис-хранитель"), L("Больше месяца подряд. Выше только небо.")) }
+        if totalHours >= 100 { return (L("Ёкай"), L("100 часов под защитой. Выше только легенды.")) }
+        if s >= 30 { return (L("Лис-хранитель"), String(format: L("До «Ёкая» ещё %lld ч под защитой"), 100 - totalHours)) }
         if s >= 7 { return (L("Тихая лиса"), String(format: L("До «Лиса-хранителя» ещё %lld дн. подряд"), 30 - s)) }
         if sessions.count >= 5 { return (L("Любопытная лиса"), String(format: L("До «Тихой лисы» ещё %lld дн. подряд"), 7 - s)) }
         return (L("Лисёнок"), L("Подключайтесь каждый день, и звание вырастет."))
@@ -43,7 +55,8 @@ import Foundation
     static var badges: [(icon: String, title: String)] {
         var result: [(String, String)] = []
         let cal = Calendar.current
-        if sessions.contains(where: { (2..<6).contains(cal.component(.hour, from: $0.start)) }) { result.append(("moon.stars.fill", L("Ночная сова"))) }
+        if sessions.contains(where: { (2..<5).contains(cal.component(.hour, from: $0.start)) }) { result.append(("moon.stars.fill", L("Ночная сова"))) }
+        if sessions.contains(where: { (5..<7).contains(cal.component(.hour, from: $0.start)) }) { result.append(("sunrise.fill", L("Ранняя пташка"))) }
         if Set(sessions.compactMap(\.country)).count >= 5 { result.append(("airplane", L("Путешественник"))) }
         if sessions.contains(where: { $0.duration >= 86_400 }) { result.append(("flame.fill", L("Марафонец"))) }
         return result

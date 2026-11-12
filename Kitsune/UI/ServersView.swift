@@ -310,9 +310,28 @@ private struct ServerRow: View {
     let ping: Ping?
     var history: [Int] = []
     var onSelect: () -> Void
+    @State private var flipped = false
+
+    /// Back of the card: country, endpoint and what the hourly stats say.
+    private var back: some View {
+        let hours = PingStats.averages(server.id)
+        let best = hours.enumerated().compactMap { h in h.element.map { (h.offset, $0) } }.min { $0.1 < $1.1 }
+        let country = server.countryCode.flatMap { Locale.current.localizedString(forRegionCode: $0) } ?? server.summary
+        return HStack(spacing: 12) {
+            Image(systemName: "arrow.uturn.backward").foregroundStyle(.secondary).frame(width: 32)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("\(country) · \(server.host):\(server.port)").font(.subheadline).lineLimit(1)
+                Text(best.map { String(format: L("Быстрее всего около %lld:00, в среднем %lld мс"), $0.0, $0.1) } ?? L("Пока нет статистики по часам"))
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+        }
+    }
 
     var body: some View {
         Button(action: onSelect) {
+            ZStack {
+            back.opacity(flipped ? 1 : 0).rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
             HStack(spacing: 12) {
                 Group {
                     if let flag = server.flag {
@@ -322,6 +341,8 @@ private struct ServerRow: View {
                     }
                 }
                 .frame(width: 32)
+                .contentShape(.rect)
+                .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.2)) { flipped.toggle() } }
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(server.displayName).font(.body).lineLimit(1)
@@ -336,6 +357,9 @@ private struct ServerRow: View {
                     .opacity(selected ? 1 : 0)
                     .scaleEffect(selected ? 1 : 0.6)
             }
+            .opacity(flipped ? 0 : 1)
+            }
+            .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .frame(minHeight: 48)

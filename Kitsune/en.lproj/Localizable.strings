@@ -313,3 +313,10 @@
 "«Ночная сова», «Путешественник» и «Марафонец» рядом со званием." = "“Night owl”, “Traveler” and “Marathoner” next to your rank.";
 "Лиса живёт сама" = "The fox lives on its own";
 "Иногда дёргает ухом. Если семь раз коснуться названия, кувыркнётся." = "Sometimes flicks an ear. Tap the name seven times and it flips.";
+"Быстрее всего около %lld:00, в среднем %lld мс" = "Fastest around %lld:00, %lld ms on average";
+"Пока нет статистики по часам" = "No hourly stats yet";
+"Ранняя пташка" = "Early bird";
+"Ёкай" = "Yokai";
+"100 часов под защитой. Выше только легенды." = "100 hours protected. Only legends are higher.";
+"До «Ёкая» ещё %lld ч под защитой" = "%lld more hours of protection to “Yokai”";
+"С возвращением! Не виделись %lld дн." = "Welcome back! %lld days since last time.";
