@@ -14,6 +14,11 @@ struct KitsuneApp: App {
 
     init() {
         BrandFont.register()
+        // Remember whether this install predates the badge: people who already finished onboarding were here from the early releases.
+        let defaults = UserDefaults.standard
+        if defaults.string(forKey: "firstVersion") == nil {
+            defaults.set(defaults.bool(forKey: "onboardingDone") ? "early" : (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"), forKey: "firstVersion")
+        }
         #if os(macOS)
         Task { await Updater.shared.checkIfDue() }
         #endif
@@ -203,7 +208,10 @@ struct RootView: View {
             case .settings: SettingsView(vpn: vpn, library: library)
             }
         }
+        .id(item)
+        .transition(.blurReplace)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.smooth(duration: 0.3), value: item)
         .background {
             // The living glow belongs to the Home screen only; the other tabs stay flat.
             if item == .home { KitsuneBackground(mood: mood, active: tab == item) }

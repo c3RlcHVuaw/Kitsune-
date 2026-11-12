@@ -11,6 +11,10 @@ public struct SubscriptionInfo: Codable, Equatable, Sendable {
     public var updateIntervalHours: Int?
     public var announce: String?
     public var supportURL: URL?
+    /// The provider's site (`profile-web-page-url`).
+    public var webPageURL: URL?
+    /// Any other links the panel sends: other URL headers and links written inside the announcement.
+    public var extraLinks: [URL]?
 
     public init() {}
 
@@ -26,7 +30,16 @@ public struct SubscriptionInfo: Codable, Equatable, Sendable {
         info.title = h["profile-title"].map(decodeText)
         info.announce = h["announce"].map(decodeText)
         info.updateIntervalHours = h["profile-update-interval"].flatMap { Int($0.trimmingCharacters(in: .whitespaces)) }
-        info.supportURL = (h["support-url"] ?? h["profile-web-page-url"]).flatMap(URL.init(string:))
+        info.supportURL = h["support-url"].flatMap(link)
+        info.webPageURL = h["profile-web-page-url"].flatMap(link)
+        var extra: [URL] = (h.filter { $0.key.hasSuffix("url") && !["support-url", "profile-web-page-url"].contains($0.key) }
+            .sorted { $0.key < $1.key }.compactMap { link($0.value) })
+        if let announce = info.announce, let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) {
+            extra += detector.matches(in: announce, range: NSRange(announce.startIndex..., in: announce)).compactMap(\.url)
+        }
+        let known = [info.supportURL, info.webPageURL].compactMap { $0 }
+        info.extraLinks = extra.reduce(into: [URL]()) { if !known.contains($1) && !$0.contains($1) { $0.append($1) } }
+        if info.extraLinks?.isEmpty == true { info.extraLinks = nil }
         if let userinfo = h["subscription-userinfo"] {
             // "upload=123; download=456; total=789; expire=1767225600"
             for pair in userinfo.split(separator: ";") {
@@ -43,6 +56,15 @@ public struct SubscriptionInfo: Codable, Equatable, Sendable {
         }
         return info
     }
+
+    private static func link(_ value: String) -> URL? {
+        let text = decodeText(value).trimmingCharacters(in: .whitespaces)
+        guard let url = URL(string: text), ["http", "https", "tg"].contains(url.scheme?.lowercased() ?? "") else { return nil }
+        return url
+    }
+
+    /// Every link worth a button: support first, then the site, then the rest. Telegram links are the usual "channel" entry.
+    public var links: [URL] { [supportURL, webPageURL].compactMap { $0 } + (extraLinks ?? []) }
 
     /// Some panels send `base64:<data>` to carry non-ASCII text in headers.
     private static func decodeText(_ value: String) -> String {

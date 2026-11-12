@@ -161,6 +161,15 @@ enum ButtonTheme: String, CaseIterable {
         }
     }
 
+    /// System sounds for connecting and for a user-driven disconnect: each theme sounds a little different.
+    var sounds: (connect: String, disconnect: String) {
+        switch self {
+        case .copper: ("Glass", "Pop")
+        case .moon: ("Ping", "Tink")
+        case .neon: ("Hero", "Bottle")
+        }
+    }
+
     var title: LocalizedStringKey {
         switch self { case .copper: "Медь"; case .moon: "Луна"; case .neon: "Неон" }
     }
@@ -225,6 +234,57 @@ struct Snow: View {
 }
 
 /// Soft white cap along the top edge of the disc.
+/// The time of year decides what drifts around the button: snow, petals or leaves. Summer stays clean.
+enum Season {
+    case winter, spring, autumn
+
+    static var current: Season? {
+        if UserDefaults.standard.bool(forKey: "winterPreview") { return .winter }
+        let c = Calendar.current.dateComponents([.month, .day], from: .now)
+        switch c.month ?? 0 {
+        case 12: return .winter
+        case 1: return (c.day ?? 99) <= 15 ? .winter : nil
+        case 3, 4, 5: return .spring
+        case 9, 10, 11: return .autumn
+        default: return nil
+        }
+    }
+
+    var colors: [Color] {
+        switch self {
+        case .winter: [.white]
+        case .spring: [Color(red: 1.0, green: 0.74, blue: 0.82), Color(red: 1.0, green: 0.86, blue: 0.90)]
+        case .autumn: [Color(red: 0.95, green: 0.55, blue: 0.18), Color(red: 0.80, green: 0.32, blue: 0.14), Color(red: 0.93, green: 0.74, blue: 0.25)]
+        }
+    }
+}
+
+/// Petals or leaves slowly turning as they fall.
+struct FallingBits: View {
+    let season: Season
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            Canvas { ctx, size in
+                for i in 0..<18 {
+                    let speed = 16.0 + Double((i * 5) % 12)
+                    let x = Double((i * 47) % 100) / 100 * size.width + sin(t * 0.8 + Double(i)) * 14
+                    let y = (t * speed + Double(i * 37)).truncatingRemainder(dividingBy: size.height + 24) - 12
+                    let w = 5.0 + Double(i % 3) * 1.6
+                    var piece = ctx
+                    piece.translateBy(x: x, y: y)
+                    piece.rotate(by: .radians(t * 1.2 + Double(i)))
+                    piece.fill(Path(ellipseIn: CGRect(x: -w, y: -w / 2.2, width: w * 2, height: w * 0.9)),
+                               with: .color(season.colors[i % season.colors.count].opacity(0.75)))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 struct SnowCap: View {
     var body: some View {
         Circle()

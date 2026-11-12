@@ -56,6 +56,7 @@ import Foundation
         var result: [(String, String)] = []
         let cal = Calendar.current
         if sessions.contains(where: { (2..<5).contains(cal.component(.hour, from: $0.start)) }) { result.append(("moon.stars.fill", L("Ночная сова"))) }
+        if UserDefaults.standard.string(forKey: "firstVersion") == "early" { result.append(("seal.fill", L("Первый релиз"))) }
         if sessions.contains(where: { (5..<7).contains(cal.component(.hour, from: $0.start)) }) { result.append(("sunrise.fill", L("Ранняя пташка"))) }
         if Set(sessions.compactMap(\.country)).count >= 5 { result.append(("airplane", L("Путешественник"))) }
         if sessions.contains(where: { $0.duration >= 86_400 }) { result.append(("flame.fill", L("Марафонец"))) }

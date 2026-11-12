@@ -70,4 +70,6 @@ import Testing
     #expect(info.updateIntervalHours == 12)
     #expect(info.announce == "Плановые работы в 03:00")
     #expect(info.supportURL?.absoluteString == "https://t.me/support")
+    let more = SubscriptionInfo.parse(headers: ["support-url": "https://t.me/help", "profile-web-page-url": "https://example.com", "announce": "Канал https://t.me/news и https://t.me/help", "announce-url": "https://t.me/promo"])
+    #expect(more.links.map(\.absoluteString) == ["https://t.me/help", "https://example.com", "https://t.me/promo", "https://t.me/news"])
 }

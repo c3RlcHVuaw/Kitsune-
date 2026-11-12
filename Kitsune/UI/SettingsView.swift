@@ -53,7 +53,7 @@ struct SettingsView: View {
                             buttonRow("Проверить сейчас", "checkmark.shield") { Task { await leak.run() } }
                         }
                         .appear(1)
-                        ListSection(title: "Оформление", footer: "Снег на кнопке идёт с декабря до середины января.") {
+                        ListSection(title: "Оформление", footer: "Зимой на кнопке снег, весной лепестки, осенью листья.") {
                             ListRow {
                                 Text("Цвет кнопки")
                                 Spacer()
@@ -69,7 +69,7 @@ struct SettingsView: View {
                                     }
                                 }
                             }
-                            toggleRow("Зимнее оформление", $winterMode)
+                            toggleRow("Сезонное оформление", $winterMode)
                             #if os(macOS)
                             toggleRow("Тактильный отклик", $haptics)
                             #endif

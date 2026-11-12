@@ -60,7 +60,7 @@ struct HomeView: View {
                 ClipboardOffer(library: library).padding(.top, 10)
                 #endif
                 Spacer(minLength: 16)
-                ConnectButton(status: vpn.status, theme: theme, ring: ringColor, winter: winterMode && Snow.isSeason, error: hasError, action: toggle, flip: flip)
+                ConnectButton(status: vpn.status, theme: theme, ring: ringColor, season: winterMode ? Season.current : nil, error: hasError, action: toggle, flip: flip)
                 StatusCaption(status: vpn.status, hasError: hasError, server: server, connectedDate: vpn.connectedDate) {
                     tab = .servers
                 }
@@ -127,8 +127,8 @@ struct HomeView: View {
                 else if new == .disconnected, old != .disconnecting { performer.perform(.levelChange, performanceTime: .now) }
             }
             guard sounds else { return }
-            if new == .connected { NSSound(named: "Glass")?.play() }
-            else if new == .disconnected, old == .disconnecting { NSSound(named: "Pop")?.play() }
+            if new == .connected { NSSound(named: theme.sounds.connect)?.play() }
+            else if new == .disconnected, old == .disconnecting { NSSound(named: theme.sounds.disconnect)?.play() }
         }
         .sheet(isPresented: $showDiagnostics) { DiagnosticsView(vpn: vpn, server: server?.displayName) }
         #endif
@@ -163,7 +163,7 @@ private struct ConnectButton: View {
     let status: NEVPNStatus
     let theme: ButtonTheme
     let ring: Color
-    let winter: Bool
+    let season: Season?
     let error: Bool
     var action: () -> Void
 
@@ -173,6 +173,7 @@ private struct ConnectButton: View {
     @State private var sway: CGFloat = 0
     @State private var twitch: CGFloat = 0
     @State private var flipAngle = 0.0
+    @State private var dizzy = false
     /// Bumped by the home screen when the wordmark is tapped seven times.
     var flip = 0
 
@@ -207,6 +208,7 @@ private struct ConnectButton: View {
                     .animation(.smooth(duration: 0.8), value: status)
                 FoxMark(color: connected ? .white : theme.soft, droop: error ? 1 : 0, sway: sway, twitch: twitch)
                     .animation(.smooth(duration: 0.5), value: error)
+                    .overlay { FoxEyes().stroke(.black.opacity(0.7), style: StrokeStyle(lineWidth: 2.6, lineCap: .round, lineJoin: .round)).opacity(dizzy ? 1 : 0).offset(y: 4) }
                     .rotation3DEffect(.degrees(flipAngle), axis: (x: 0, y: 1, z: 0))
                     .frame(width: 88)
                     .offset(y: 4)
@@ -214,8 +216,12 @@ private struct ConnectButton: View {
                         view.offset(y: phase && connected && !reduceMotion ? -8 : 0)
                     } animation: { _ in .spring(duration: 0.35, bounce: 0.5) }
             }
-            .overlay { if winter { SnowCap().padding(1) } }
-            .overlay { if winter { Snow().frame(width: 260, height: 300) } }
+            .overlay { if season == .winter { SnowCap().padding(1) } }
+            .overlay {
+                if let season {
+                    Group { if season == .winter { Snow() } else { FallingBits(season: season) } }.frame(width: 260, height: 300)
+                }
+            }
             .overlay { SparkBurst(start: burst, colors: [theme.accent, theme.soft, .white]).frame(width: 420, height: 420) }
             .frame(width: 200, height: 200)
             .contentShape(.circle)
@@ -235,6 +241,12 @@ private struct ConnectButton: View {
                     try? await Task.sleep(for: .milliseconds(100))
                 }
             }
+        }
+        .onChange(of: error) { _, failed in
+            // A moment of ">  <" eyes when the connection fails.
+            guard failed, !reduceMotion else { return }
+            withAnimation(.easeIn(duration: 0.15)) { dizzy = true }
+            Task { try? await Task.sleep(for: .seconds(1.8)); withAnimation(.easeOut(duration: 0.4)) { dizzy = false } }
         }
         .onChange(of: flip) {
             guard !reduceMotion else { return }
@@ -261,6 +273,17 @@ private struct ConnectButton: View {
             }
         }
         .accessibilityLabel(status.isActive ? L("Отключить VPN") : L("Подключить VPN"))
+    }
+}
+
+/// Squeezed-shut eyes for the fox: ">" on the left, "<" on the right.
+private struct FoxEyes: Shape {
+    func path(in r: CGRect) -> Path {
+        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: r.minX + r.width * x, y: r.minY + r.height * y) }
+        return Path { p in
+            p.move(to: pt(0.27, 0.40)); p.addLine(to: pt(0.37, 0.45)); p.addLine(to: pt(0.27, 0.50))
+            p.move(to: pt(0.73, 0.40)); p.addLine(to: pt(0.63, 0.45)); p.addLine(to: pt(0.73, 0.50))
+        }
     }
 }
 
@@ -425,8 +448,9 @@ private struct ConnectionInfo: View {
                 var request = URLRequest(url: URL(string: endpoint)!, timeoutInterval: 6)
                 request.cachePolicy = .reloadIgnoringLocalCacheData
                 guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
-                if let exit = try? JSONDecoder().decode(ExitIP.self, from: data) { return exit }
-                return (try? JSONDecoder().decode(Whois.self, from: data)).map { ExitIP(ip: $0.ip, country: $0.country_code) }
+                // ipwho.is also has a "country" field, but it holds the name, so its code field is checked first.
+                if let whois = try? JSONDecoder().decode(Whois.self, from: data) { return ExitIP(ip: whois.ip, country: whois.country_code) }
+                return (try? JSONDecoder().decode(ExitIP.self, from: data)).flatMap { $0.country.count == 2 ? $0 : nil }
             }
             group.addTask {
                 try? await Task.sleep(for: .seconds(7))

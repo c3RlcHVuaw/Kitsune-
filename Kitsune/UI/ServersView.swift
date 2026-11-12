@@ -1,6 +1,10 @@
 import Shared
 import SwiftUI
 
+extension EnvironmentValues {
+    @Entry var serverQuery = ""
+}
+
 /// Subscriptions and manual servers: refresh, traffic, expiry, announcements, ping, selection.
 struct ServersView: View {
     let library: Library
@@ -8,8 +12,22 @@ struct ServersView: View {
 
     @State var adding = false
     @State private var editing: ServerConfig?
+    @State private var query = ""
     @State var pinging = false
     @AppStorage("serverSort") var sort = "default"
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Поиск по серверам", text: $query).textFieldStyle(.plain)
+            if !query.isEmpty {
+                Button("Очистить", systemImage: "xmark.circle.fill") { query = "" }
+                    .labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .glassEffect(.regular, in: .capsule)
+    }
 
     var body: some View {
         NavigationStack {
@@ -29,6 +47,7 @@ struct ServersView: View {
                     ScrollView {
                         Group {
                             LazyVStack(spacing: 22) {
+                                if library.allServers.count > 12 { searchField }
                                 ForEach(Array(library.subscriptions.enumerated()), id: \.element.id) { index, subscription in
                                     SubscriptionCard(library: library, subscription: subscription).appear(index)
                                 }
@@ -36,6 +55,7 @@ struct ServersView: View {
                                     ManualCard(library: library, editing: $editing).appear(library.subscriptions.count)
                                 }
                             }
+                            .environment(\.serverQuery, query)
                             .padding(.horizontal, 16)
                             .padding(.bottom, 24)
                         }
@@ -103,7 +123,8 @@ private struct SubscriptionCard: View {
     @State private var announceExpanded = false
     private var updating: Bool { library.updating.contains(subscription.id) }
     private var announce: String? { subscription.info.announce.flatMap { $0.isEmpty ? nil : $0 } }
-    private var hasInfoRows: Bool { hasUsage || announce != nil || subscription.lastError != nil }
+    private var links: [URL] { subscription.info.links }
+    private var hasInfoRows: Bool { hasUsage || !links.isEmpty || announce != nil || subscription.lastError != nil }
     private var hasUsage: Bool { subscription.info.used != nil || subscription.info.expire != nil }
 
     var body: some View {
@@ -112,8 +133,12 @@ private struct SubscriptionCard: View {
             if hasInfoRows || !subscription.collapsed {
                 Surface {
                     if hasUsage { usage }
-                    if let announce {
+                    if !links.isEmpty {
                         if hasUsage { divider }
+                        linkButtons
+                    }
+                    if let announce {
+                        if hasUsage || !links.isEmpty { divider }
                         Button {
                             withAnimation(.smooth) { announceExpanded.toggle() }
                         } label: {
@@ -155,6 +180,35 @@ private struct SubscriptionCard: View {
     }
 
     private var divider: some View { Divider().opacity(0.5).padding(.leading, 16) }
+
+    /// Support, site and Telegram links the provider put into the subscription.
+    private var linkButtons: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(links, id: \.self) { url in
+                    let item = Self.describe(url, support: url == subscription.info.supportURL, site: url == subscription.info.webPageURL)
+                    Button { openURL(url) } label: {
+                        Label(item.title, systemImage: item.icon).font(.footnote.weight(.medium)).lineLimit(1)
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(.white.opacity(0.08), in: .capsule)
+                    }
+                    .buttonStyle(.plain)
+                    .help(url.absoluteString)
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private static func describe(_ url: URL, support: Bool, site: Bool) -> (title: String, icon: String) {
+        let host = url.host?.lowercased() ?? ""
+        let telegram = url.scheme == "tg" || host == "t.me" || host.hasSuffix("telegram.me") || host.hasSuffix("telegram.org")
+        if telegram { return (support ? L("Поддержка") : L("Telegram"), "paperplane.fill") }
+        if support { return (L("Поддержка"), "questionmark.bubble.fill") }
+        if site { return (L("Сайт"), "globe") }
+        return (host.replacingOccurrences(of: "www.", with: ""), "link")
+    }
 
     private var header: some View {
         HStack(spacing: 8) {
@@ -272,8 +326,11 @@ private struct ServerRows: View {
     @AppStorage("serverSort") private var sort = "default"
     @State private var heat: ServerConfig?
 
+    @Environment(\.serverQuery) private var query
+
     private var ordered: [ServerConfig] {
-        switch sort {
+        let servers = query.isEmpty ? servers : servers.filter { $0.displayName.localizedCaseInsensitiveContains(query) || $0.summary.localizedCaseInsensitiveContains(query) }
+        return switch sort {
         case "ping": servers.sorted { (library.pings[$0.id]?.milliseconds ?? .max) < (library.pings[$1.id]?.milliseconds ?? .max) }
         case "country": servers.sorted { ($0.flag ?? "\u{10FFFF}", $0.displayName) < ($1.flag ?? "\u{10FFFF}", $1.displayName) }
         default: servers
