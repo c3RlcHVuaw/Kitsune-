@@ -198,7 +198,7 @@ final class VPNManager {
                 let total = item.upload + item.download
                 current[item.id] = total
                 guard primed, let path = item.metadata?.processPath, !path.isEmpty else { continue }
-                perApp[URL(filePath: path).lastPathComponent, default: 0] += max(total - (last[item.id] ?? 0), 0)
+                perApp[Self.appName(path), default: 0] += max(total - (last[item.id] ?? 0), 0)
             }
             last = current
             let wasPrimed = primed
@@ -207,6 +207,13 @@ final class VPNManager {
             topApps = perApp.map { (name: $0.key, rate: Int64(Double($0.value) / seconds)) }
                 .filter { $0.rate > 1024 }.sorted { $0.rate > $1.rate }.prefix(3).map { $0 }
         }
+    }
+
+    /// "/Applications/Claude.app/…/Claude Helper (air)" → "Claude": the outermost app bundle, without the user the core appends.
+    private static func appName(_ path: String) -> String {
+        if let app = path.split(separator: "/").first(where: { $0.hasSuffix(".app") }) { return String(app.dropLast(4)) }
+        let name = URL(filePath: path).lastPathComponent
+        return name.replacing(#/ \([^)]*\)$/#, with: "")
     }
 
     func disconnect() {

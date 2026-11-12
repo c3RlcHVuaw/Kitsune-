@@ -19,10 +19,14 @@ import Foundation
         hideTask?.cancel()
         state = .running
         try? await Task.sleep(for: .seconds(3)) // routes need a moment to settle
-        guard !Task.isCancelled, let after = await LeakCheck.probe() else {
-            if !Task.isCancelled { finish(.warn(L("Не удалось проверить соединение."))) }
-            return
+        // Right after connecting the routes are still switching, so one failed look is not a verdict.
+        var seen: LeakCheck.Result?
+        for attempt in 0..<3 where seen == nil && !Task.isCancelled {
+            if attempt > 0 { try? await Task.sleep(for: .seconds(2)) }
+            seen = await LeakCheck.probe()
         }
+        guard !Task.isCancelled else { return }
+        guard let after = seen else { finish(.warn(L("Не удалось проверить соединение."))); return }
         if let before, before.ip == after.ip {
             finish(.warn(L("Адрес не изменился: трафик идёт мимо VPN.")))
             return

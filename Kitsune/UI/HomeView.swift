@@ -33,18 +33,19 @@ struct HomeView: View {
 
     /// Ring colour follows the real latency through the tunnel: theme colour is fine, amber so-so, red bad.
     private var ringColor: Color {
-        guard vpn.status == .connected, let server, let ping = library.pings[server.id] else { return tinted(theme.accent) }
+        guard vpn.status == .connected, let server, let ping = library.pings[server.id] else { return theme.accent }
         switch ping {
-        case .tunnel(let ms): return ms < 600 ? tinted(theme.accent) : ms < 1500 ? Color(red: 1.0, green: 0.80, blue: 0.25) : Color(red: 0.92, green: 0.22, blue: 0.22)
+        case .tunnel(let ms): return ms < 600 ? theme.accent : ms < 1500 ? Color(red: 1.0, green: 0.80, blue: 0.25) : Color(red: 0.92, green: 0.22, blue: 0.22)
         case .failed: return Color(red: 0.92, green: 0.22, blue: 0.22)
-        default: return tinted(theme.accent)
+        default: return theme.accent
         }
     }
 
-    /// The ring picks up a little of the exit country's colour.
-    private func tinted(_ base: Color) -> Color {
-        guard countryTint, vpn.status == .connected, let code = server?.countryCode else { return base }
-        return base.mix(with: CountryColor.of(code), by: 0.25)
+    // Mixing the country colour into the ring turned copper + blue into mud, so the ring keeps the theme
+    // and only the outgoing pulse wave carries the country colour.
+    private var pulseColor: Color? {
+        guard countryTint, vpn.status == .connected, let code = server?.countryCode else { return nil }
+        return CountryColor.of(code)
     }
     private var hasError: Bool { vpn.lastError != nil && !vpn.status.isActive }
 
@@ -73,7 +74,7 @@ struct HomeView: View {
                 ClipboardOffer(library: library).padding(.top, 10)
                 #endif
                 Spacer(minLength: 16)
-                ConnectButton(status: vpn.status, theme: theme, ring: ringColor, season: winterMode ? Season.current : nil, error: hasError, action: toggle, flip: flip, nod: nod, celebrate: celebrate)
+                ConnectButton(status: vpn.status, theme: theme, ring: ringColor, season: winterMode ? Season.current : nil, error: hasError, action: toggle, flip: flip, nod: nod, celebrate: celebrate, pulse: pulseColor)
                 StatusCaption(status: vpn.status, hasError: hasError, server: server, connectedDate: vpn.connectedDate) {
                     tab = .servers
                 }
@@ -248,6 +249,7 @@ private struct ConnectButton: View {
     var flip = 0
     var nod = 0
     var celebrate = 0
+    var pulse: Color?
     @State private var asleep = false
     @State private var wake = 0
     @State private var nodOffset: CGFloat = 0
@@ -262,7 +264,7 @@ private struct ConnectButton: View {
             ZStack {
                 if connected && !reduceMotion {
                     Circle()
-                        .stroke(copper.opacity(0.5), lineWidth: 1.5)
+                        .stroke((pulse ?? copper).opacity(0.5), lineWidth: 1.5)
                         .phaseAnimator([false, true]) { view, grown in
                             view.scaleEffect(grown ? 1.35 : 1).opacity(grown ? 0 : 1)
                         } animation: { _ in .easeOut(duration: 2.2) }
@@ -420,8 +422,8 @@ private struct TopApps: View {
                         .background(.white.opacity(0.08), in: .capsule)
                 }
             }
-            .transition(.opacity)
-            .animation(.smooth, value: apps.map(\.name))
+            // The list reshuffles every two seconds; animating that made the capsules overlap mid-move.
+            .transaction { $0.animation = nil }
         }
     }
 }

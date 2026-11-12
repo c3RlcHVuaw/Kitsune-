@@ -416,7 +416,8 @@ private struct ServerRow: View {
     }
 
     var body: some View {
-        Button(action: onSelect) {
+        // A flipped card turns back on any tap; only the front selects the server.
+        Button { if flipped { withAnimation(.spring(duration: 0.5, bounce: 0.2)) { flipped = false } } else { onSelect() } } label: {
             ZStack {
             back.opacity(flipped ? 1 : 0).rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
             HStack(spacing: 12) {
@@ -449,10 +450,10 @@ private struct ServerRow: View {
             }
             .opacity(flipped ? 0 : 1)
             }
-            .overlay(alignment: .leading) {
+            .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
+            .overlay(alignment: .leading) { // outside the rotation, so the tick stays on the left of a flipped card
                 Capsule().fill(CountryColor.of(server.countryCode)).frame(width: 3, height: 26).offset(x: -10).opacity(0.85)
             }
-            .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .frame(minHeight: 48)
