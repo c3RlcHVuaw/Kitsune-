@@ -1,0 +1,20 @@
+<Application x:Class="Kitsune.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+            <!-- Copper accent (win/accent in Figma) -->
+            <Color x:Key="SystemAccentColor">#FF9A4D</Color>
+            <Color x:Key="SystemAccentColorLight1">#FFB074</Color>
+            <Color x:Key="SystemAccentColorLight2">#FF9A4D</Color>
+            <Color x:Key="SystemAccentColorLight3">#FFC49B</Color>
+            <Color x:Key="SystemAccentColorDark1">#E6782E</Color>
+            <Color x:Key="SystemAccentColorDark2">#C4621F</Color>
+            <Color x:Key="SystemAccentColorDark3">#9A4A14</Color>
+            <FontFamily x:Key="DisplayFont">ms-appx:///Assets/Unbounded.ttf#Unbounded</FontFamily>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

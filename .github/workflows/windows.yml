@@ -1,0 +1,48 @@
+name: Windows
+
+on:
+  push:
+    branches: [main]
+    paths: ['windows/**', '.github/workflows/windows.yml', 'PacketTunnel/RuleSets/**']
+  workflow_dispatch:
+
+env:
+  SING_BOX: 1.14.4
+  WINTUN: 0.14.1
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Core tests
+        run: dotnet test windows/Kitsune.Core.Tests -c Release
+
+      - name: Publish app
+        run: dotnet publish windows/Kitsune.App/Kitsune.App.csproj -c Release -r win-x64 -p:Platform=x64 -o out/Kitsune
+
+      - name: Bundle sing-box, Wintun and rule sets
+        shell: pwsh
+        run: |
+          $core = "out/Kitsune/core"
+          New-Item -ItemType Directory -Force $core | Out-Null
+          Invoke-WebRequest "https://github.com/SagerNet/sing-box/releases/download/v$env:SING_BOX/sing-box-$env:SING_BOX-windows-amd64.zip" -OutFile sb.zip
+          Expand-Archive sb.zip sb
+          Copy-Item (Get-ChildItem sb -Recurse -Filter sing-box.exe | Select-Object -First 1).FullName $core
+          Invoke-WebRequest "https://www.wintun.net/builds/wintun-$env:WINTUN.zip" -OutFile wintun.zip
+          Expand-Archive wintun.zip wintun
+          Copy-Item wintun/wintun/bin/amd64/wintun.dll $core
+          Copy-Item PacketTunnel/RuleSets "$core/RuleSets" -Recurse -Exclude SNAPSHOT_DATE
+          & "$core/sing-box.exe" version
+          Compress-Archive -Path out/Kitsune/* -DestinationPath Kitsune-win-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kitsune-win-x64
+          path: Kitsune-win-x64.zip

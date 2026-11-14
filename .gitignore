@@ -6,3 +6,6 @@ DerivedData/
 secrets/
 dist/
 Frameworks/Libbox.xcframework/
+
+windows/**/bin/
+windows/**/obj/

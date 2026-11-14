@@ -1,0 +1,7 @@
+<Page x:Class="Kitsune.Pages.RoutesPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer>
+        <StackPanel x:Name="Root" Padding="40,32" Spacing="16" MaxWidth="760" HorizontalAlignment="Stretch" />
+    </ScrollViewer>
+</Page>
