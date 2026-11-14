@@ -124,4 +124,19 @@ public class CoreTests
         Assert.Equal(DnsProvider.Cloudflare, s.Dns);
         Assert.Empty(s.Presets);
     }
+
+    [Fact]
+    public void UpdateCheckPicksNewestWindowsBuild()
+    {
+        const string json = """
+        [{"tag_name":"v1.9","draft":false,"html_url":"p9","assets":[{"name":"Kitsune-mac.zip","browser_download_url":"mac"}]},
+         {"tag_name":"v1.8.1-win2","draft":false,"html_url":"p2","assets":[{"name":"Kitsune-win-x64.zip","browser_download_url":"z2"}]},
+         {"tag_name":"v1.8.1-win1","draft":false,"html_url":"p1","assets":[{"name":"Kitsune-win-x64.zip","browser_download_url":"z1"}]}]
+        """;
+        Assert.Equal("z2", UpdateCheck.Newest(json, BuildVersion.Parse("1.8.1-win1")!.Value)!.ZipUrl);
+        Assert.Null(UpdateCheck.Newest(json, BuildVersion.Parse("1.8.1-win2")!.Value));
+        Assert.Equal("1.8.1-win2", UpdateCheck.Newest(json, BuildVersion.Parse("1.8.0")!.Value)!.Version);
+        Assert.True(BuildVersion.Parse("v1.10")!.Value.CompareTo(BuildVersion.Parse("1.9.9-win5")!.Value) > 0);
+        Assert.Null(BuildVersion.Parse("nightly"));
+    }
 }

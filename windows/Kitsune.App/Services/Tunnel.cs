@@ -9,6 +9,16 @@ public enum TunnelState { Idle, Connecting, Connected, Error }
 
 public sealed record AppRate(string Name, long BytesPerSecond);
 
+public sealed class SessionRecord
+{
+    public DateTimeOffset Start { get; set; }
+    public int Seconds { get; set; }
+    public string Server { get; set; } = "";
+    public string Country { get; set; } = "";
+    public long Up { get; set; }
+    public long Down { get; set; }
+}
+
 /// Runs the bundled sing-box (core\sing-box.exe + wintun.dll) as a child process and watches it through the local Clash API.
 public sealed class Tunnel
 {
@@ -32,6 +42,7 @@ public sealed class Tunnel
     public Queue<long> History { get; } = new();
 
     public event Action? Changed;
+    public event Action<SessionRecord>? SessionEnded;
 
     Process? process;
     CancellationTokenSource? cts;
@@ -180,8 +191,12 @@ public sealed class Tunnel
         catch (Exception e) when (e is OperationCanceledException or HttpRequestException or JsonException or KeyNotFoundException) { }
     }
 
+    public string LogTail() { lock (log) return string.Join(Environment.NewLine, log); }
+
     void Kill()
     {
+        if (ConnectedAt is { } started)
+            SessionEnded?.Invoke(new SessionRecord { Start = started, Seconds = (int)(DateTime.Now - started).TotalSeconds, Server = Server?.DisplayName ?? "", Country = Ip?.Code ?? "", Up = UpTotal, Down = DownTotal });
         cts?.Cancel();
         try { if (process is { HasExited: false }) { process.Kill(entireProcessTree: true); process.WaitForExit(3000); } }
         catch (InvalidOperationException) { }

@@ -20,6 +20,8 @@ sealed class SavedState
     public string? SelectedId { get; set; }
     public RoutingSettings Routing { get; set; } = new();
     public bool AutoConnect { get; set; }
+    public bool OnboardingDone { get; set; }
+    public List<SessionRecord> Sessions { get; set; } = [];
 }
 
 /// Everything the user has set up: servers, subscriptions, routing. Persisted as JSON in %AppData%\Kitsune.
@@ -41,6 +43,14 @@ public sealed class AppState
     public string? SelectedId => data.SelectedId;
     public Dictionary<string, int> Pings { get; } = [];
 
+    public List<SessionRecord> Sessions => data.Sessions;
+
+    public bool OnboardingDone
+    {
+        get => data.OnboardingDone;
+        set { data.OnboardingDone = value; Save(); }
+    }
+
     public bool AutoConnect
     {
         get => data.AutoConnect;
@@ -51,6 +61,13 @@ public sealed class AppState
     {
         try { if (File.Exists(FilePath)) data = JsonSerializer.Deserialize<SavedState>(File.ReadAllText(FilePath), RoutingSettings.JsonOptions) ?? new(); }
         catch (Exception e) when (e is IOException or JsonException) { data = new(); }
+        Tunnel.Shared.SessionEnded += record =>
+        {
+            if (record.Seconds < 5) return; // failed starts and instant reconnects are not worth a history row
+            data.Sessions.Insert(0, record);
+            if (data.Sessions.Count > 200) data.Sessions.RemoveRange(200, data.Sessions.Count - 200);
+            Save();
+        };
     }
 
     public void Save()

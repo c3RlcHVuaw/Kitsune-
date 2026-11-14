@@ -9,11 +9,20 @@ public partial class App : Application
 
     public App() => InitializeComponent();
 
+    /// Really exits (the window's close button only hides to the tray): stops the core first.
+    public static void Quit()
+    {
+        Tunnel.Shared.Stop();
+        Window?.DisposeTray();
+        Current.Exit();
+    }
+
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         AppState.Shared.Load();
         Window = new MainWindow();
         Window.Activate();
+        Updater.Shared.Start();
         if (AppState.Shared.AutoConnect && AppState.Shared.Selected() != null) _ = AppState.Shared.ConnectAsync();
     }
 }

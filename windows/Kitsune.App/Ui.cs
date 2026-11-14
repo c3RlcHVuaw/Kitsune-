@@ -44,8 +44,14 @@ public static class Ui
     public static Image Flag(string? code, double width = 24)
     {
         var image = new Image { Width = width, Height = width * 0.7, Stretch = Stretch.UniformToFill };
-        if (!string.IsNullOrEmpty(code)) image.Source = new BitmapImage(new Uri($"https://flagcdn.com/w40/{code.ToLowerInvariant()}.png"));
+        if (!string.IsNullOrEmpty(code)) image.Source = FlagSource(code);
         return image;
+    }
+
+    static ImageSource? FlagSource(string code)
+    {
+        var path = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "flags", code.ToLowerInvariant() + ".png");
+        return System.IO.File.Exists(path) ? new BitmapImage(new Uri(path)) : null;
     }
 
     public static string Bytes(long value)

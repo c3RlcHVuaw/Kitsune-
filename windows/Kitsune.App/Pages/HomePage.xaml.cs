@@ -29,8 +29,8 @@ public sealed partial class HomePage : Page
         Side.Children.Add(Section("Подключение", info));
         Side.Children.Add(Section("Скорость", speed));
         Side.Children.Add(Section("Кто потребляет", apps));
-        Loaded += (_, _) => { tunnel.Changed += OnChanged; AppState.Shared.Changed += OnChanged; clock.Tick += (_, _) => Refresh(); clock.Start(); Refresh(); };
-        Unloaded += (_, _) => { tunnel.Changed -= OnChanged; AppState.Shared.Changed -= OnChanged; clock.Stop(); };
+        Loaded += (_, _) => { Updater.Shared.Changed += OnChanged; tunnel.Changed += OnChanged; AppState.Shared.Changed += OnChanged; clock.Tick += (_, _) => Refresh(); clock.Start(); Refresh(); };
+        Unloaded += (_, _) => { Updater.Shared.Changed -= OnChanged; tunnel.Changed -= OnChanged; AppState.Shared.Changed -= OnChanged; clock.Stop(); };
     }
 
     void OnChanged() => Ui.OnUi(this, Refresh);
@@ -87,8 +87,38 @@ public sealed partial class HomePage : Page
         await tunnel.RestartAsync(state.Selected(), state.AllServers.ToList(), state.Routing);
     }
 
+    /// "Доступно обновление": copper-edged bar above both columns; one button downloads, replaces the files and restarts.
+    void RefreshBanner()
+    {
+        var updater = Updater.Shared;
+        if (updater.State == UpdateState.Idle || updater.Info == null) { Banner.Visibility = Visibility.Collapsed; return; }
+        var installing = updater.State == UpdateState.Installing;
+        var row = new Grid { ColumnSpacing = 14 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.Children.Add(new FontIcon { Glyph = "\uE896", FontSize = 20, Foreground = Ui.Accent, VerticalAlignment = VerticalAlignment.Center });
+        var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        texts.Children.Add(Ui.Text(installing ? "Устанавливаем обновление" : $"Доступно обновление {updater.Info.Version}", 14, true));
+        texts.Children.Add(Ui.Secondary(updater.State == UpdateState.Failed ? "Не получилось: " + updater.Error : installing ? "Kitsune перезапустится сам" : "Переустановить для обновления: VPN отключится на секунду"));
+        Grid.SetColumn(texts, 1); row.Children.Add(texts);
+        FrameworkElement control = installing
+            ? new ProgressRing { Width = 20, Height = 20, IsActive = true }
+            : new Button { Content = updater.State == UpdateState.Failed ? "Повторить" : "Обновить", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        if (control is Button button) button.Click += async (_, _) => await updater.InstallAsync();
+        Grid.SetColumn(control, 2); row.Children.Add(control);
+        Banner.Background = Ui.Res("CardBackgroundFillColorDefaultBrush");
+        Banner.BorderBrush = Ui.Accent;
+        Banner.BorderThickness = new Thickness(1);
+        Banner.CornerRadius = new CornerRadius(8);
+        Banner.Padding = new Thickness(16, 12, 16, 12);
+        Banner.Child = row;
+        Banner.Visibility = Visibility.Visible;
+    }
+
     void Refresh()
     {
+        RefreshBanner();
         var state = tunnel.State;
         var connected = state == TunnelState.Connected;
         ring.Stroke = connected ? Ui.Accent : state == TunnelState.Error ? Ui.Res("SystemFillColorCriticalBrush") : Ui.Res("ControlStrokeColorDefaultBrush");

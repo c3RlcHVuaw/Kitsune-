@@ -65,7 +65,8 @@ struct HomeView: View {
     }
 
     var body: some View {
-        Group {
+        // Scrolls (no indicator, no bounce when it fits) once the update banner or the stats cards push the content past the window.
+        GeometryReader { geo in ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 0) {
                 ZStack {
                 #if os(macOS)
@@ -87,6 +88,7 @@ struct HomeView: View {
                 .padding(.top, 8)
                 #if os(macOS)
                 ClipboardOffer(library: library).padding(.top, 10)
+                UpdateBanner().padding(.top, 10)
                 #endif
                 Spacer(minLength: 16)
                 ConnectButton(status: vpn.status, theme: theme, ring: ringColor, season: winterMode ? Season.current : nil, error: hasError, action: toggle, flip: flip, nod: nod, celebrate: celebrate, pulse: pulseColor)
@@ -143,7 +145,10 @@ struct HomeView: View {
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 20)
+            .frame(minHeight: geo.size.height)
         }
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollClipDisabled() }
         .animation(.smooth, value: vpn.status)
         .animation(.smooth, value: hasError)
         .animation(.smooth, value: minimal)
@@ -896,6 +901,47 @@ private struct ClipboardOffer: View {
     private func dismiss() {
         dismissedChange = NSPasteboard.general.changeCount
         link = nil
+    }
+}
+#endif
+
+#if os(macOS)
+/// "Доступно обновление": appears on Home when a newer release exists; one tap downloads, replaces the app and reopens it.
+struct UpdateBanner: View {
+    private var updater: Updater { .shared }
+
+    var body: some View {
+        if case .available(let version, _) = updater.state {
+            card(title: "Доступно обновление \(version)", subtitle: "Переустановить для обновления: VPN отключится на секунду", busy: false)
+        } else if updater.state == .installing {
+            card(title: "Устанавливаем обновление", subtitle: "Kitsune перезапустится сам", busy: true)
+        }
+    }
+
+    private func card(title: LocalizedStringKey, subtitle: LocalizedStringKey, busy: Bool) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.down.circle.fill").font(.title2).foregroundStyle(Color.brand)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(subtitle).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            if busy {
+                ProgressView().controlSize(.small)
+            } else {
+                Button("Обновить") { Task { await updater.install() } }
+                    .buttonStyle(.plain)
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 14).padding(.vertical, 7)
+                    .background(Color.brand.opacity(0.9), in: .capsule)
+                    .foregroundStyle(.black.opacity(0.85))
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .kGlass(in: .rect(cornerRadius: 18))
+        .padding(.horizontal, 16)
+        .transition(.blurReplace)
+        .accessibilityElement(children: .combine)
     }
 }
 #endif

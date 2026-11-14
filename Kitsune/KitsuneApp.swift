@@ -20,7 +20,7 @@ struct KitsuneApp: App {
             defaults.set(defaults.bool(forKey: "onboardingDone") ? "early" : (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"), forKey: "firstVersion")
         }
         #if os(macOS)
-        Task { await Updater.shared.checkIfDue() }
+        Updater.shared.start()
         #endif
     }
 

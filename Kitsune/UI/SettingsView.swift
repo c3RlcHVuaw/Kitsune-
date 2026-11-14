@@ -248,7 +248,8 @@ struct SettingsView: View {
 
     private var updateTitle: LocalizedStringKey {
         switch updater.state {
-        case .available(let version, _): "Скачать версию \(version)"
+        case .available(let version, _): "Обновить до \(version)"
+        case .installing: "Устанавливаем…"
         case .checking: "Проверяем…"
         default: "Проверить обновления"
         }
@@ -263,7 +264,7 @@ struct SettingsView: View {
     }
 
     private func updateAction() {
-        if case .available(_, let url) = updater.state { NSWorkspace.shared.open(url) } else { Task { await updater.check() } }
+        if case .available = updater.state { Task { await updater.install() } } else { Task { await updater.check() } }
     }
     #endif
 
