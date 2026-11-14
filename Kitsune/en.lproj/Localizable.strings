@@ -397,3 +397,5 @@
 "Часы защиты, серии и значки одной картинкой, без личных данных." = "Hours protected, streaks and badges in one picture, no personal data.";
 "Лиса в меню-баре" = "Fox in the menu bar";
 "Спит при выключенном VPN и виляет ушами, пока идёт трафик." = "Sleeps while the VPN is off and wiggles its ears while traffic flows.";
+"Работает на macOS 15" = "Works on macOS 15";
+"Старые Маки, в том числе с Intel, теперь тоже поддерживаются." = "Older Macs, Intel ones included, are now supported.";
