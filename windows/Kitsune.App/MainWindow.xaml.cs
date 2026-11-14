@@ -27,7 +27,9 @@ public sealed partial class MainWindow : Window
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(1000, 680));
+        // Screenshot runs (--page=…) pin the window to the top-left corner of a small screen.
+        if (App.StartPage != null) AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(0, 0, 1000, 690));
+        else AppWindow.Resize(new Windows.Graphics.SizeInt32(1000, 680));
         TitleFox.Children.Add(Ui.Fox(16, Ui.Accent));
         if (Content is FrameworkElement root) root.RequestedTheme = ElementTheme.Dark;
         AppWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Kitsune.ico"));
