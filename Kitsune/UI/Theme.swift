@@ -42,7 +42,7 @@ struct BrandButtonStyle: ButtonStyle {
             .foregroundStyle(.white)
             .padding(.horizontal, 28)
             .padding(.vertical, 14)
-            .glassEffect(.regular.interactive(), in: .capsule)
+            .kGlass(in: .capsule, interactive: true)
             .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.45)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(.snappy(duration: 0.15), value: configuration.isPressed)
@@ -70,7 +70,7 @@ extension View {
     /// Glass only for the few small interactive controls.
     func brandGlass(in shape: some Shape, interactive: Bool = false) -> some View {
         // The clear variant keeps the orange showing through; .regular turns muddy brown on it.
-        glassEffect(interactive ? .clear.tint(.white.opacity(0.2)).interactive() : .clear.tint(.white.opacity(0.2)), in: shape)
+        kGlass(in: shape, interactive: interactive, clear: true, tint: .white.opacity(0.2))
     }
 }
 
@@ -113,7 +113,7 @@ struct ListSection<Content: View>: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassEffect(.regular, in: .rect(cornerRadius: 20))
+            .kGlass(in: .rect(cornerRadius: 20))
             if let footer { Text(footer).font(.footnote).foregroundStyle(.secondary).padding(.horizontal, 16) }
         }
     }
@@ -293,5 +293,49 @@ struct SnowCap: View {
                     style: StrokeStyle(lineWidth: 9, lineCap: .round))
             .shadow(color: .white.opacity(0.35), radius: 6)
             .accessibilityHidden(true)
+    }
+}
+
+/// Liquid Glass exists only on macOS/iOS 26; older systems get a plain blurred material.
+struct GlassSurface: ViewModifier {
+    let shape: AnyShape
+    var interactive = false
+    var clear = false
+    var tint: Color?
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(macOS 26, iOS 26, *) {
+            content.glassEffect(glass, in: shape)
+        } else {
+            content.background(clear ? .ultraThinMaterial : .regularMaterial, in: shape)
+                .overlay(shape.stroke(.white.opacity(0.12), lineWidth: 0.5))
+        }
+    }
+
+    @available(macOS 26, iOS 26, *)
+    private var glass: Glass {
+        var base: Glass = clear ? .clear : .regular
+        if let tint { base = base.tint(tint) }
+        return interactive ? base.interactive() : base
+    }
+}
+
+extension View {
+    func kGlass(in shape: some Shape, interactive: Bool = false, clear: Bool = false, tint: Color? = nil) -> some View {
+        modifier(GlassSurface(shape: AnyShape(shape), interactive: interactive, clear: clear, tint: tint))
+    }
+}
+
+/// `GlassEffectContainer` where available, a plain group otherwise.
+struct GlassGroup<Content: View>: View {
+    var spacing: CGFloat
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        if #available(macOS 26, iOS 26, *) {
+            GlassEffectContainer(spacing: spacing) { content }
+        } else {
+            content
+        }
     }
 }

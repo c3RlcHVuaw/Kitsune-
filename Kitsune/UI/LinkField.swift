@@ -13,8 +13,8 @@ struct LinkField: View {
                 .technicalTextEntry()
                 .privacySensitive()
                 .padding(14)
-                .glassEffect(.regular, in: .rect(cornerRadius: 18))
-            GlassEffectContainer(spacing: 10) {
+                .kGlass(in: .rect(cornerRadius: 18))
+            GlassGroup(spacing: 10) {
                 // Side by side when they fit, stacked at large Dynamic Type sizes.
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 10) { buttons }
@@ -42,7 +42,7 @@ struct LinkField: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .glassEffect(.regular.interactive(), in: .capsule)
+            .kGlass(in: .capsule, interactive: true)
             .fixedSize()
         #endif
         #if DEBUG

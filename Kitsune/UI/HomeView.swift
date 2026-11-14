@@ -122,7 +122,7 @@ struct HomeView: View {
                             .multilineTextAlignment(.leading)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
-                            .glassEffect(.regular, in: .rect(cornerRadius: 18))
+                            .kGlass(in: .rect(cornerRadius: 18))
                     } else if vpn.status == .connected, !minimal, let server {
                         VStack(spacing: 12) {
                             ForEach(Array(HomeBlock.order(homeOrder).enumerated()), id: \.element) { index, block in
@@ -292,7 +292,7 @@ private struct ConnectButton: View {
                     .overlay(Circle().stroke(LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.05), copper.opacity(0.4)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
                     .shadow(color: copper.opacity(connected ? 0.55 : busy ? 0.3 : 0.12), radius: connected ? 46 : 28)
                     .shadow(color: .black.opacity(0.5), radius: 18, y: 10)
-                    .glassEffect(connected ? .regular.tint(copper.opacity(0.45)) : .regular, in: .circle)
+                    .kGlass(in: .circle, tint: connected ? copper.opacity(0.45) : nil)
                     .animation(.smooth(duration: 0.8), value: status)
                 FoxMark(color: connected ? .white : theme.soft, droop: error ? 1 : (sleeping ? 0.35 : 0), sway: sway, twitch: twitch)
                     .animation(.smooth(duration: 0.5), value: error)
@@ -452,7 +452,7 @@ private struct TopApps: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 4)
-        .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        .kGlass(in: .rect(cornerRadius: 22))
         .animation(.smooth(duration: 0.5), value: apps.map(\.name))
         .animation(.smooth(duration: 0.6), value: apps.map(\.rate))
         .overlay {
@@ -560,7 +560,7 @@ private struct ProfileChip: View {
                 .overlay(Capsule().stroke(on ? Color(red: 1.0, green: 0.50, blue: 0.10).opacity(0.5) : .white.opacity(0.15), lineWidth: 0.6))
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .kGlass(in: .capsule, interactive: true)
         .sensoryFeedback(.selection, trigger: on)
         .accessibilityValue(on ? L("Включено") : L("Выключено"))
         .accessibilityHint("Российские сайты без VPN")
@@ -614,7 +614,7 @@ private struct ConnectionInfo: View {
             Text("Сайты видят").font(.caption).opacity(0.8)
         }
         .padding(16)
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        .kGlass(in: .rect(cornerRadius: 20))
         .accessibilityElement(children: .combine)
         .task(id: server.id) { await lookup() }
     }
@@ -788,7 +788,7 @@ private struct SpeedRow: View {
             .opacity(0.9)
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
-        .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        .kGlass(in: .rect(cornerRadius: 22))
         .accessibilityElement(children: .combine)
     }
 
@@ -873,7 +873,7 @@ private struct ClipboardOffer: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .glassEffect(.regular, in: .capsule)
+                .kGlass(in: .capsule)
                 .transition(.blurReplace)
             }
         }

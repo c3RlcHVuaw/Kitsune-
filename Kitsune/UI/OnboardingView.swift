@@ -95,7 +95,7 @@ struct OnboardingView: View {
             Text("Что работает без VPN").font(.display(22))
             Text("Банки, маркетплейсы, Госуслуги и другие российские сервисы. Настраивать ничего не нужно, список можно изменить позже на вкладке «Маршруты».")
                 .foregroundStyle(.secondary)
-            GlassEffectContainer(spacing: 8) {
+            GlassGroup(spacing: 8) {
                 FlowChips(items: ["Банки", "Ozon", "Wildberries", "Госуслуги", "Яндекс", "VK", "Такси", "Доставка"])
             }
         }
@@ -201,7 +201,7 @@ private struct FlowChips: View {
                     .font(.subheadline)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .glassEffect(.regular, in: .capsule)
+                    .kGlass(in: .capsule)
             }
         }
     }

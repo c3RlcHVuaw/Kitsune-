@@ -335,7 +335,7 @@ struct SettingsView: View {
             .padding(.horizontal, 4)
         }
         .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+        .kGlass(in: .rect(cornerRadius: 24))
     }
 
     private func legend(_ title: LocalizedStringKey, _ color: Color) -> some View {

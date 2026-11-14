@@ -28,7 +28,7 @@ struct ServersView: View {
                 .labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
-        .glassEffect(.regular, in: .capsule)
+        .kGlass(in: .capsule)
         .transition(.blurReplace)
     }
 
@@ -65,7 +65,7 @@ struct ServersView: View {
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
-        .glassEffect(.regular, in: .capsule)
+        .kGlass(in: .capsule)
     }
 
     var body: some View {
@@ -152,7 +152,7 @@ private struct Surface<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) { content }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassEffect(.regular, in: .rect(cornerRadius: 20))
+            .kGlass(in: .rect(cornerRadius: 20))
     }
 }
 

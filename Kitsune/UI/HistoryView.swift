@@ -138,7 +138,7 @@ struct HistoryView: View {
             }
         }
         .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+        .kGlass(in: .rect(cornerRadius: 24))
     }
 
     /// Thirteen weeks of squares, one per day: the darker, the longer the protection ran.
