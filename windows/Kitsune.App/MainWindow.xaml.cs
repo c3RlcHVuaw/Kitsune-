@@ -1,6 +1,6 @@
 using Kitsune.Pages;
 using Kitsune.Services;
-using Microsoft.UI.Composition.SystemBackdrops;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 

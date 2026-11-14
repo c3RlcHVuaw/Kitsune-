@@ -25,7 +25,13 @@ jobs:
         run: dotnet test windows/Kitsune.Core.Tests -c Release
 
       - name: Publish app
-        run: dotnet publish windows/Kitsune.App/Kitsune.App.csproj -c Release -r win-x64 -p:Platform=x64 -o out/Kitsune
+        shell: pwsh
+        run: |
+          dotnet publish windows/Kitsune.App/Kitsune.App.csproj -c Release -r win-x64 -p:Platform=x64 -o out/Kitsune
+          if ($LASTEXITCODE -ne 0) {
+            Get-ChildItem windows/Kitsune.App/obj -Recurse -Filter output.json | ForEach-Object { Write-Host $_.FullName; Get-Content $_.FullName }
+            exit 1
+          }
 
       - name: Bundle sing-box, Wintun and rule sets
         shell: pwsh
