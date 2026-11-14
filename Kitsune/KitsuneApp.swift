@@ -188,7 +188,10 @@ struct RootView: View {
         }
         .task {
             // Launch auto-connect: give the library a moment to load, then connect once.
-            guard autoConnect, onboardingDone else { return }
+            // After a self-update the new copy brings the VPN back if it was on.
+            let afterUpdate = UserDefaults.standard.bool(forKey: "reconnectAfterUpdate")
+            UserDefaults.standard.removeObject(forKey: "reconnectAfterUpdate")
+            guard autoConnect || afterUpdate, onboardingDone else { return }
             // A few tries: the first second can be too early (library still loading), and a window opening
             // on top at launch must not cancel the connection.
             for delay in [1.0, 4.0, 8.0] {

@@ -5,11 +5,11 @@ struct WhatsNewView: View {
     @Environment(\.dismiss) private var dismiss
 
     private let items: [(icon: String, color: Color, title: String, text: String)] = [
-        ("arrow.down.circle.fill", .orange, "Обновление в один клик", "Плашка на главной сама находит новую версию и переустанавливает Kitsune."),
-        ("arrow.up.and.down.text.horizontal", .blue, "Главная прокручивается", "Если всё не помещается в окно, экран плавно скроллится."),
-        ("macbook", .teal, "Работает на macOS 15", "Старые Маки, в том числе с Intel, теперь тоже поддерживаются."),
-        ("rectangle.3.group.fill", .purple, "Главная под себя", "В настройках блоки можно скрывать и перетаскивать местами."),
-        ("chart.bar.fill", .green, "Новый вид скорости", "Две колонки с числами и тонкие столбики вместо линий."),
+        ("arrow.down.circle.fill", .orange, "Обновление одним нажатием", "Нажали «Обновить»: Kitsune сам скачает, установит и перезапустится."),
+        ("percent", .blue, "Видно, как идёт загрузка", "На плашке обновления появился прогресс в процентах."),
+        ("lock.shield.fill", .green, "VPN возвращается сам", "Если VPN был включён, после обновления он подключится снова."),
+        ("arrow.up.and.down.text.horizontal", .purple, "Главная прокручивается", "Если всё не помещается в окно, экран плавно скроллится."),
+        ("macbook", .teal, "Работает на macOS 15", "Старые Маки, в том числе с Intel, поддерживаются."),
     ]
 
     var body: some View {

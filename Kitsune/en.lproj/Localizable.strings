@@ -410,3 +410,14 @@
 "Плашка на главной сама находит новую версию и переустанавливает Kitsune." = "A banner on Home finds the new version by itself and reinstalls Kitsune.";
 "Главная прокручивается" = "Home scrolls";
 "Если всё не помещается в окно, экран плавно скроллится." = "If everything does not fit the window, the screen scrolls smoothly.";
+"Скачиваем обновление" = "Downloading the update";
+"Устанавливаем и перезапускаем" = "Installing and restarting";
+"Обновляем Kitsune" = "Updating Kitsune";
+"Не получилось: %@" = "Failed: %@";
+"Обновление одним нажатием" = "One-tap update";
+"Нажали «Обновить»: Kitsune сам скачает, установит и перезапустится." = "Tap Update: Kitsune downloads, installs and restarts by itself.";
+"Видно, как идёт загрузка" = "Download progress is visible";
+"На плашке обновления появился прогресс в процентах." = "The update banner now shows progress in percent.";
+"VPN возвращается сам" = "VPN comes back by itself";
+"Если VPN был включён, после обновления он подключится снова." = "If the VPN was on, it reconnects after the update.";
+"Старые Маки, в том числе с Intel, поддерживаются." = "Older Macs, Intel ones included, are supported.";

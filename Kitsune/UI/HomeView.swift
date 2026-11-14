@@ -149,6 +149,9 @@ struct HomeView: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .scrollClipDisabled() }
+        #if os(macOS)
+        .onChange(of: vpn.status, initial: true) { Updater.shared.reconnectAfter = vpn.status == .connected }
+        #endif
         .animation(.smooth, value: vpn.status)
         .animation(.smooth, value: hasError)
         .animation(.smooth, value: minimal)
@@ -906,41 +909,52 @@ private struct ClipboardOffer: View {
 #endif
 
 #if os(macOS)
-/// "Доступно обновление": appears on Home when a newer release exists; one tap downloads, replaces the app and reopens it.
+/// "Доступно обновление": appears on Home when a newer release exists; one tap downloads (with progress), replaces the app,
+/// reopens it and brings the VPN back if it was on.
 struct UpdateBanner: View {
     private var updater: Updater { .shared }
 
     var body: some View {
         if case .available(let version, _) = updater.state {
-            card(title: "Доступно обновление \(version)", subtitle: "Переустановить для обновления: VPN отключится на секунду", busy: false)
+            card(title: "Доступно обновление \(version)", subtitle: updater.installError.map { LocalizedStringKey("Не получилось: \($0)") } ?? "Переустановить для обновления: VPN отключится на секунду", busy: false)
         } else if updater.state == .installing {
-            card(title: "Устанавливаем обновление", subtitle: "Kitsune перезапустится сам", busy: true)
+            card(title: "Обновляем Kitsune", subtitle: updater.stage, busy: true)
         }
     }
 
     private func card(title: LocalizedStringKey, subtitle: LocalizedStringKey, busy: Bool) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "arrow.down.circle.fill").font(.title2).foregroundStyle(Color.brand)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.subheadline.weight(.semibold))
-                Text(subtitle).font(.caption).foregroundStyle(.secondary)
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.down.circle.fill").font(.title2).foregroundStyle(Color.brand)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.subheadline.weight(.semibold))
+                    Text(subtitle).font(.caption).foregroundStyle(updater.installError == nil || busy ? Color.secondary : Color.alert).lineLimit(2)
+                }
+                Spacer(minLength: 8)
+                if busy {
+                    if let progress = updater.progress {
+                        Text("\(Int(progress * 100))%").font(.footnote.weight(.semibold).monospacedDigit()).foregroundStyle(.secondary)
+                    } else {
+                        ProgressView().controlSize(.small)
+                    }
+                } else {
+                    Button(updater.installError == nil ? "Обновить" : "Повторить") { Task { await updater.install() } }
+                        .buttonStyle(.plain)
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 14).padding(.vertical, 7)
+                        .background(Color.brand.opacity(0.9), in: .capsule)
+                        .foregroundStyle(.black.opacity(0.85))
+                }
             }
-            Spacer(minLength: 8)
-            if busy {
-                ProgressView().controlSize(.small)
-            } else {
-                Button("Обновить") { Task { await updater.install() } }
-                    .buttonStyle(.plain)
-                    .font(.footnote.weight(.semibold))
-                    .padding(.horizontal, 14).padding(.vertical, 7)
-                    .background(Color.brand.opacity(0.9), in: .capsule)
-                    .foregroundStyle(.black.opacity(0.85))
+            if busy, let progress = updater.progress {
+                ProgressView(value: progress).tint(Color.brand)
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .kGlass(in: .rect(cornerRadius: 18))
         .padding(.horizontal, 16)
         .transition(.blurReplace)
+        .animation(.smooth, value: updater.progress)
         .accessibilityElement(children: .combine)
     }
 }
