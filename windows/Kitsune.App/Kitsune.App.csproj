@@ -17,7 +17,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>12</LangVersion>
     <Version>1.8.1</Version>
-    <InformationalVersion>1.8.1-win2</InformationalVersion>
+    <InformationalVersion>1.8.1-win3</InformationalVersion>
     <ApplicationIcon>Assets/Kitsune.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>

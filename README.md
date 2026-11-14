@@ -48,6 +48,25 @@
   </tr>
 </table>
 
+### Windows
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/win-home.webp" width="380" alt="Главная"><br><sub>Главная</sub></td>
+    <td align="center"><img src="docs/win-servers.webp" width="380" alt="Серверы"><br><sub>Серверы</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/win-routes.webp" width="380" alt="Маршруты"><br><sub>Маршруты</sub></td>
+    <td align="center"><img src="docs/win-history.webp" width="380" alt="История"><br><sub>История</sub></td>
+  </tr>
+</table>
+
+Скриншоты Windows сняты с настоящего приложения на тестовых данных.
+
+## Установка на Windows
+
+Скачайте `Kitsune-Setup.exe` из [последнего релиза с тегом `-win`](../../releases) (Windows 10 1809 и новее, x64) и запустите. Приложение работает от имени администратора: это нужно для сетевого адаптера. Установщик пока не подписан, поэтому SmartScreen покажет предупреждение: «Подробнее» → «Выполнить в любом случае». Сборка пока считается пре-релизом.
+
 ## Установка на Mac
 
 Приложение не подписано сертификатом Apple, поэтому macOS при первом запуске его блокирует.
