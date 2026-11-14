@@ -12,6 +12,7 @@ The owner writes in Russian: answer in Russian, keep UI copy in Russian (English
 | `Kitsune/UI/` | Screens: `HomeView`, `ServersView`, `RoutingView`, `SettingsView`, `HistoryView`, `OnboardingView`, `DiagnosticsView`, `PingHeatmapView`, `WhatsNewView`, `HomeLayout` (home block editor). Shared look in `Theme.swift` |
 | `Shared/` | Swift package with no UI: `ConfigBuilder` (sing-box JSON), `RoutingSettings`, `ServerConfig`, `Subscription`, link parsers, `ErrorHint`. Unit tests live here |
 | `PacketTunnel/` | iOS/NE extension and bundled rule sets (`RuleSets/*.srs`, refreshed by `scripts/update-rule-snapshot.sh`) |
+| `windows/` | Native Windows app (WinUI 3, C#): `Kitsune.Core` (port of `Shared`: link parsers, `ConfigBuilder`, routing; xunit tests in `Kitsune.Core.Tests`, run on any OS with `dotnet test`), `Kitsune.App` (UI per the Figma Windows page, `Tunnel` runs `core\sing-box.exe` as admin). Built only by CI (`.github/workflows/windows.yml` → artifact `Kitsune-win-x64`); not runnable on macOS |
 | `scripts/` | `build-mac.sh` (release build + dmg/zip), `build-libbox.sh`, icon and dmg helpers |
 | `project.yml` | XcodeGen spec. Version = `MARKETING_VERSION`. The `.xcodeproj` is generated, never edit it |
 
@@ -41,6 +42,7 @@ pkill -x Kitsune; ditto .build/dd-mac-release/Build/Products/Release/Kitsune.app
   `grep -oE '^"([^"\\]|\\.)*" =' Kitsune/en.lproj/Localizable.strings | sort | uniq -d` must print nothing.
 - `ConfigBuilder` changes keep defaults backward compatible (golden test in `Shared/Tests/SharedTests/Golden`), and new
   `RoutingSettings` fields decode with defaults so old saved settings still load.
+- Keep `windows/Kitsune.Core` in step with `Shared` when link parsing, `ConfigBuilder` or `RoutingSettings` change.
 - Never toggle the user's VPN while testing (no clicks on the connect button). Ask before installing or restarting the app.
 - Commit, push and release only when the owner asks. When asked for ideas, only propose; implement after they pick numbers,
   and never repeat ideas already offered.
