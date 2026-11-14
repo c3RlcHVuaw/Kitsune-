@@ -8,9 +8,9 @@ namespace Kitsune;
 
 public sealed partial class MainWindow : Window
 {
-    readonly Tray tray;
+    readonly Tray? tray;
 
-    public void DisposeTray() => tray.Dispose();
+    public void DisposeTray() => tray?.Dispose();
 
     public void Reveal() { AppWindow.Show(); Activate(); }
 
@@ -33,14 +33,15 @@ public sealed partial class MainWindow : Window
         AppWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Kitsune.ico"));
         // The close button hides the window to the tray; the VPN keeps running. "Выход" in the tray menu quits for real.
         AppWindow.Closing += (_, args) => { args.Cancel = true; AppWindow.Hide(); };
-        tray = new Tray(this);
+        try { tray = new Tray(this); } catch (Exception) { tray = null; } // no notification area (e.g. a bare session): run without the icon
         if (!AppState.Shared.OnboardingDone) ShowOnboarding();
     }
 
     void OnNavLoaded(object sender, RoutedEventArgs e)
     {
         if (Nav.SettingsItem is NavigationViewItem settings) settings.Content = "Настройки";
-        Nav.SelectedItem = Nav.MenuItems[0];
+        Nav.SelectedItem = App.StartPage == "settings" ? Nav.SettingsItem
+            : Nav.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => (string)i.Tag == App.StartPage) ?? Nav.MenuItems[0];
     }
 
     void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)

@@ -48,6 +48,30 @@ jobs:
           & "$core/sing-box.exe" version
           Compress-Archive -Path out/Kitsune/* -DestinationPath Kitsune-win-x64.zip
 
+      - name: Screenshots of the real app
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          New-Item -ItemType Directory -Force shots | Out-Null
+          $state = "$env:APPDATA\Kitsune"
+          function Shot($name, $arguments) {
+            $p = if ($arguments) { Start-Process out\Kitsune\Kitsune.exe -ArgumentList $arguments -PassThru } else { Start-Process out\Kitsune\Kitsune.exe -PassThru }
+            Start-Sleep 14
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("shots\$name.png")
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            Get-Process sing-box -ErrorAction SilentlyContinue | Stop-Process -Force
+            Start-Sleep 2
+          }
+          Remove-Item -Recurse -Force $state -ErrorAction SilentlyContinue
+          Shot "0-onboarding" ""
+          New-Item -ItemType Directory -Force $state | Out-Null
+          Copy-Item windows\demo-state.json "$state\state.json"
+          foreach ($page in "home","servers","routes","history","settings") { Shot $page "--page=$page" }
+
       - name: Build installer
         shell: pwsh
         run: |
@@ -63,3 +87,10 @@ jobs:
           path: |
             Kitsune-win-x64.zip
             out/Kitsune-Setup.exe
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: shots/*.png
+          if-no-files-found: ignore

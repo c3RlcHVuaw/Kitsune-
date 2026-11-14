@@ -7,6 +7,9 @@ public partial class App : Application
 {
     public static MainWindow? Window { get; private set; }
 
+    /// `Kitsune.exe --page=servers` opens that tab (used by CI to take screenshots).
+    public static string? StartPage { get; } = Environment.GetCommandLineArgs().FirstOrDefault(a => a.StartsWith("--page="))?[7..];
+
     public App() => InitializeComponent();
 
     /// Really exits (the window's close button only hides to the tray): stops the core first.

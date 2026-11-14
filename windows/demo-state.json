@@ -1,0 +1,76 @@
+{
+ "manual": [
+  {
+   "id": "demo0",
+   "name": "🇳🇱 Нидерланды",
+   "summary": "VLESS · gRPC · TLS",
+   "host": "nl.example.net",
+   "port": 443,
+   "outbound": "{\"type\": \"vless\", \"server\": \"nl.example.net\", \"server_port\": 443, \"uuid\": \"u\"}",
+   "link": null
+  },
+  {
+   "id": "demo1",
+   "name": "🇸🇪 Швеция",
+   "summary": "VLESS · TCP · Reality",
+   "host": "se.example.net",
+   "port": 443,
+   "outbound": "{\"type\": \"vless\", \"server\": \"se.example.net\", \"server_port\": 443, \"uuid\": \"u\"}",
+   "link": null
+  },
+  {
+   "id": "demo2",
+   "name": "🇩🇪 Германия",
+   "summary": "VLESS · TCP · Reality",
+   "host": "de.example.net",
+   "port": 443,
+   "outbound": "{\"type\": \"vless\", \"server\": \"de.example.net\", \"server_port\": 443, \"uuid\": \"u\"}",
+   "link": null
+  },
+  {
+   "id": "demo3",
+   "name": "🇱🇻 Латвия",
+   "summary": "VLESS · gRPC · TLS",
+   "host": "lv.example.net",
+   "port": 443,
+   "outbound": "{\"type\": \"vless\", \"server\": \"lv.example.net\", \"server_port\": 443, \"uuid\": \"u\"}",
+   "link": null
+  },
+  {
+   "id": "demo4",
+   "name": "🇫🇮 Финляндия",
+   "summary": "Hysteria2 · QUIC",
+   "host": "fi.example.net",
+   "port": 443,
+   "outbound": "{\"type\": \"vless\", \"server\": \"fi.example.net\", \"server_port\": 443, \"uuid\": \"u\"}",
+   "link": null
+  }
+ ],
+ "subscriptions": [],
+ "selectedId": "demo0",
+ "routing": {
+  "profile": "russiaDirect",
+  "direct": [],
+  "proxy": []
+ },
+ "autoConnect": false,
+ "onboardingDone": true,
+ "sessions": [
+  {
+   "start": "2026-11-14T09:12:00+03:00",
+   "seconds": 5400,
+   "server": "Нидерланды",
+   "country": "nl",
+   "up": 41000000,
+   "down": 238000000
+  },
+  {
+   "start": "2026-11-13T21:40:00+03:00",
+   "seconds": 1860,
+   "server": "Швеция",
+   "country": "se",
+   "up": 9000000,
+   "down": 88000000
+  }
+ ]
+}
