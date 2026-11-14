@@ -406,3 +406,7 @@
 "Обновить" = "Update";
 "Обновить до %@" = "Update to %@";
 "Устанавливаем…" = "Installing…";
+"Обновление в один клик" = "One-click update";
+"Плашка на главной сама находит новую версию и переустанавливает Kitsune." = "A banner on Home finds the new version by itself and reinstalls Kitsune.";
+"Главная прокручивается" = "Home scrolls";
+"Если всё не помещается в окно, экран плавно скроллится." = "If everything does not fit the window, the screen scrolls smoothly.";
