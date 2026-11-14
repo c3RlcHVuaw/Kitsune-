@@ -48,7 +48,18 @@ jobs:
           & "$core/sing-box.exe" version
           Compress-Archive -Path out/Kitsune/* -DestinationPath Kitsune-win-x64.zip
 
+      - name: Build installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress | Out-Null
+          $v = ((Select-Xml -Path windows/Kitsune.App/Kitsune.App.csproj -XPath '//Version').Node.InnerText)
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" windows\installer.iss /DSourceDir="$PWD\out\Kitsune" /DAppVersion=$v
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-Item out\Kitsune-Setup.exe
+
       - uses: actions/upload-artifact@v4
         with:
           name: Kitsune-win-x64
-          path: Kitsune-win-x64.zip
+          path: |
+            Kitsune-win-x64.zip
+            out/Kitsune-Setup.exe
