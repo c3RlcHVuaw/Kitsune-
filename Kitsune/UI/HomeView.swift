@@ -63,6 +63,15 @@ struct HomeView: View {
         return CountryColor.of(code)
     }
     private var hasError: Bool { vpn.lastError != nil && !vpn.status.isActive }
+    /// Double hop: the server traffic enters through before it leaves via the selected one.
+    private var entryServer: ServerConfig? {
+        #if os(macOS)
+        guard let id = library.routing.entryServerID, id != server?.id else { return nil }
+        return library.allServers.first { $0.id == id }
+        #else
+        return nil
+        #endif
+    }
 
     @ViewBuilder private func blockView(_ block: HomeBlock, server: ServerConfig) -> some View {
         switch block {
@@ -108,7 +117,7 @@ struct HomeView: View {
                 ConnectButton(status: vpn.status, step: vpn.connectStep, theme: theme, ring: ringColor, season: winterMode ? Season.current : nil, error: hasError, action: toggle, flip: flip, nod: nod, celebrate: celebrate, pulse: pulseColor)
                     .scaleEffect(heroScale)
                     .frame(width: 200 * heroScale, height: 200 * heroScale)
-                StatusCaption(status: vpn.status, step: vpn.connectStep, hasError: hasError, server: server, connectedDate: vpn.connectedDate) {
+                StatusCaption(status: vpn.status, step: vpn.connectStep, hasError: hasError, server: server, entry: entryServer, connectedDate: vpn.connectedDate) {
                     tab = .servers
                 }
                 .padding(.top, 28 * heroScale)
@@ -571,6 +580,7 @@ private struct StatusCaption: View {
     var step: VPNManager.ConnectStep?
     let hasError: Bool
     let server: ServerConfig?
+    var entry: ServerConfig?
     let connectedDate: Date?
     var onServerTap: () -> Void
 
@@ -584,8 +594,13 @@ private struct StatusCaption: View {
                 .animation(.smooth, value: step)
             Button(action: onServerTap) {
                 HStack(spacing: 6) {
+                    if let entry {
+                        if let flag = entry.flag { Text(flag) }
+                        Text(entry.displayName).lineLimit(1)
+                        Image(systemName: "arrow.right").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+                    }
                     if let flag = server?.flag { Text(flag) }
-                    Text(server?.displayName ?? L("Добавьте сервер"))
+                    Text(server?.displayName ?? L("Добавьте сервер")).lineLimit(1)
                     if status == .connected, let connectedDate {
                         Text("·")
                         Text(connectedDate, style: .timer).monospacedDigit()

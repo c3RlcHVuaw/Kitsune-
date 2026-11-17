@@ -17,6 +17,7 @@ struct ServersView: View {
     @State var pinging = false
     @AppStorage("serverSort") var sort = "default"
     @AppStorage("compactServers") var compact = false
+    @AppStorage("hideSilent") var hideSilent = false
     @State private var pasteError: String?
 
     /// Adds whatever link is on the clipboard; without one, opens the manual form.
@@ -152,6 +153,7 @@ extension ServersView {
             }
             .pickerStyle(.inline)
             Toggle("Компактный список", isOn: $compact)
+            Toggle("Прятать неотвечающие", isOn: $hideSilent)
         }
         .menuIndicator(.hidden)
         Button("Добавить", systemImage: "plus") { adding = true }
@@ -381,8 +383,20 @@ private struct ServerRows: View {
     var editing: Binding<ServerConfig?>?
     @AppStorage("serverSort") private var sort = "default"
     @AppStorage("compactServers") private var compact = false
+    @AppStorage("hideSilent") private var hideSilent = false
     @State private var heat: ServerConfig?
     @State private var folded: Set<String> = []
+    @State private var showSilent = false
+
+    /// Servers that failed three checks in a row go to a folded "Не отвечают" group at the bottom (never the selected one).
+    private var silentOnes: [ServerConfig] {
+        guard hideSilent, query.isEmpty else { return [] }
+        return ordered.filter { library.silent.contains($0.id) && $0.id != library.selected?.id }
+    }
+    private var visible: [ServerConfig] {
+        let hidden = Set(silentOnes.map(\.id))
+        return hidden.isEmpty ? ordered : ordered.filter { !hidden.contains($0.id) }
+    }
 
     @Environment(\.serverQuery) private var query
 
@@ -401,7 +415,7 @@ private struct ServerRows: View {
     private var groups: [(code: String, servers: [ServerConfig])]? {
         guard sort == "country", query.isEmpty else { return nil }
         var order: [String] = [], byCode: [String: [ServerConfig]] = [:]
-        for server in ordered {
+        for server in visible {
             let code = server.countryCode ?? "—"
             if byCode[code] == nil { order.append(code) }
             byCode[code, default: []].append(server)
@@ -419,7 +433,25 @@ private struct ServerRows: View {
                     if group.code != groups.last?.code { Divider().opacity(0.5) }
                 }
             } else {
-                rows(ordered)
+                rows(visible)
+            }
+            let silent = silentOnes
+            if !silent.isEmpty {
+                if !visible.isEmpty { Divider().opacity(0.5) }
+                Button { withAnimation(.smooth(duration: 0.25)) { showSilent.toggle() } } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "moon.zzz").foregroundStyle(.secondary).frame(width: 32)
+                        Text("Не отвечают").font(.subheadline.weight(.semibold))
+                        Text("\(silent.count)").font(.footnote.monospacedDigit()).foregroundStyle(.secondary)
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(showSilent ? 0 : -90))
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                if showSilent { rows(silent) }
             }
         }
         .sensoryFeedback(.selection, trigger: library.selected?.id)

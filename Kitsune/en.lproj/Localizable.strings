@@ -519,3 +519,13 @@
 "Одно приложение больше не занимает две строки в «Сейчас пользуются»." = "One app no longer takes two rows in “In use now”.";
 "История считает трафик" = "History counts traffic";
 "Раньше сессии сохранялись без объёма, теперь трафик записывается." = "Sessions used to be saved without traffic; now it is recorded.";
+"Новое" = "New";
+"Прятать неотвечающие" = "Hide unresponsive";
+"Не отвечают" = "Not responding";
+"Цепочка на главной" = "The chain on Home";
+"С двойным прыжком под статусом видно оба сервера: вход → выход." = "With double hop, both servers show under the status: entry → exit.";
+"Звание в настройках" = "Your rank in Settings";
+"В паспорте видно ваше звание и сколько осталось до следующего." = "The passport shows your rank and how far the next one is.";
+"Серверы, которые не отвечают, уходят в свёрнутую группу внизу списка." = "Servers that don't respond move to a folded group at the bottom.";
+"Метки «Новое»" = "“New” marks";
+"Плитки настроек подсказывают, где после обновления появилось новое." = "Settings tiles point out what's new after an update.";

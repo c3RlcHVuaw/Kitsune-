@@ -75,6 +75,18 @@ struct SettingsView: View {
     }
     @State private var pane: Pane?
 
+    /// Panes that gained something, with the version it came in. A copper dot marks them for people who updated
+    /// from an older version, until the pane is opened once.
+    private static let fresh: [Pane: String] = [.data: "1.8.8"]
+    @AppStorage("previousVersion") private var previousVersion = ""
+    @AppStorage("openedPanes") private var openedPanes = ""
+
+    private func isNew(_ pane: Pane) -> Bool {
+        guard let since = Self.fresh[pane], !previousVersion.isEmpty,
+              since.compare(previousVersion, options: .numeric) == .orderedDescending else { return false }
+        return !openedPanes.split(separator: ",").contains(Substring("\(pane.rawValue)@\(since)"))
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
@@ -124,7 +136,10 @@ struct SettingsView: View {
         }
     }
 
-    private func open(_ pane: Pane) { withAnimation(.smooth(duration: 0.3)) { self.pane = pane } }
+    private func open(_ pane: Pane) {
+        if isNew(pane), let since = Self.fresh[pane] { openedPanes += (openedPanes.isEmpty ? "" : ",") + "\(pane.rawValue)@\(since)" }
+        withAnimation(.smooth(duration: 0.3)) { self.pane = pane }
+    }
 
     // MARK: Overview
 
@@ -168,6 +183,15 @@ struct SettingsView: View {
                         Circle().fill(updateDot).frame(width: 6, height: 6)
                         Text(updateLine).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
                     }
+                    let rank = History.rank
+                    HStack(spacing: 5) {
+                        Image(systemName: "pawprint.fill").font(.caption2)
+                        Text(rank.title).font(.caption.weight(.semibold))
+                        Text(verbatim: "·").foregroundStyle(.tertiary)
+                        Text(rank.hint).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+                    }
+                    .foregroundStyle(accent)
+                    .help(rank.hint)
                 }
                 Spacer(minLength: 0)
             }
@@ -240,6 +264,12 @@ struct SettingsView: View {
                         .frame(width: 32, height: 32)
                         .background(accent.opacity(0.18), in: .rect(cornerRadius: 10))
                     Spacer()
+                    if isNew(tile.pane) {
+                        Text("Новое").font(.caption2.weight(.semibold)).foregroundStyle(accent)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(accent.opacity(0.16), in: .capsule)
+                            .transition(.scale.combined(with: .opacity))
+                    }
                     Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
                 }
                 VStack(alignment: .leading, spacing: 2) {
@@ -618,7 +648,7 @@ struct SettingsView: View {
         if on && SMAppService.mainApp.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
     }
 
-    private static let prefKeys = ["autoConnect", "autoReconnect", "sounds", "showMenuBar", "notifications", "autoUpdateCheck", "globalHotkey", "compactServers"]
+    private static let prefKeys = ["autoConnect", "autoReconnect", "sounds", "showMenuBar", "notifications", "autoUpdateCheck", "globalHotkey", "compactServers", "hideSilent"]
 
     private func exportSettings() {
         let panel = NSSavePanel()

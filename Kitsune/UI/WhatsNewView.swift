@@ -5,11 +5,11 @@ struct WhatsNewView: View {
     @Environment(\.dismiss) private var dismiss
 
     private let items: [(icon: String, color: Color, title: String, text: String)] = [
-        ("speedometer", .orange, "Скорость в одну строку", "Загрузка, отдача и график за минуту в компактной карточке."),
-        ("clock.arrow.circlepath", .blue, "Последняя сессия", "Когда VPN выключен, под кнопкой видно, когда и сколько вы были под защитой."),
-        ("square.stack.3d.up.fill", .purple, "Без дублей в топе", "Одно приложение больше не занимает две строки в «Сейчас пользуются»."),
-        ("chart.bar.fill", .green, "История считает трафик", "Раньше сессии сохранялись без объёма, теперь трафик записывается."),
-        ("rectangle.compress.vertical", .pink, "Главная без прокрутки", "Когда появляются карточки, кнопка с лисой плавно уменьшается, и всё помещается в окно."),
+        ("point.3.connected.trianglepath.dotted", .orange, "Цепочка на главной", "С двойным прыжком под статусом видно оба сервера: вход → выход."),
+        ("pawprint.fill", .blue, "Звание в настройках", "В паспорте видно ваше звание и сколько осталось до следующего."),
+        ("moon.zzz.fill", .purple, "Прятать неотвечающие", "Серверы, которые не отвечают, уходят в свёрнутую группу внизу списка."),
+        ("sparkle", .green, "Метки «Новое»", "Плитки настроек подсказывают, где после обновления появилось новое."),
+        ("speedometer", .pink, "Скорость в одну строку", "Загрузка, отдача и график за минуту в компактной карточке."),
     ]
 
     var body: some View {
@@ -48,6 +48,8 @@ struct WhatsNewModifier: ViewModifier {
             .task {
                 let current = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
                 defer { lastSeen = current }
+                // Remembered for the "Новое" marks in Settings: what the person had before this update.
+                if !lastSeen.isEmpty, lastSeen != current { UserDefaults.standard.set(lastSeen, forKey: "previousVersion") }
                 show = onboardingDone && !lastSeen.isEmpty && lastSeen != current
             }
             .sheet(isPresented: $show) { WhatsNewView() }
