@@ -1,5 +1,6 @@
 import Shared
 import SwiftUI
+import TipKit
 
 extension EnvironmentValues {
     @Entry var serverQuery = ""
@@ -15,6 +16,17 @@ struct ServersView: View {
     @State private var query = ""
     @State var pinging = false
     @AppStorage("serverSort") var sort = "default"
+    @AppStorage("compactServers") var compact = false
+    @State private var pasteError: String?
+
+    /// Adds whatever link is on the clipboard; without one, opens the manual form.
+    private func pasteFromClipboard() {
+        guard let text = Clipboard.read()?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { adding = true; return }
+        Task {
+            do { try await library.add(any: text); pasteError = nil }
+            catch { pasteError = L("В буфере нет подходящей ссылки.") }
+        }
+    }
 
     /// The daily check found a server that is clearly faster than the selected one.
     private func betterRow(_ hint: (server: ServerConfig, saved: Int)) -> some View {
@@ -74,19 +86,21 @@ struct ServersView: View {
                 VStack(spacing: 12) {
                 ScreenHeader(title: "Серверы", subtitle: pingSubtitle) { toolbarActions }
                 if library.isEmpty {
-                    ContentUnavailableView {
-                        Label("Нет серверов", systemImage: "server.rack")
-                    } description: {
-                        Text("Добавьте ссылку на подписку или на сервер.")
-                    } actions: {
-                        Button("Добавить", systemImage: "plus") { adding = true }
-                            .buttonStyle(.brand)
+                    EmptyState(title: "Пока нет серверов", text: "Скопируйте ссылку на подписку или сервер от провайдера и вставьте её сюда.") {
+                        VStack(spacing: 10) {
+                            Button("Вставить из буфера", systemImage: "doc.on.clipboard") { pasteFromClipboard() }
+                                .buttonStyle(.brand)
+                            Button("Ввести вручную") { adding = true }
+                                .buttonStyle(.plain).foregroundStyle(.secondary).font(.subheadline)
+                            if let pasteError { Text(pasteError).font(.footnote).foregroundStyle(Color.alert).multilineTextAlignment(.center) }
+                        }
                     }
                 } else {
                     ScrollView {
                         Group {
                             LazyVStack(spacing: 22) {
                                 if library.allServers.count > 12 { searchField }
+                                TipView(ServerActionsTip()).tipBackground(.clear).kGlass(in: .rect(cornerRadius: 20))
                                 if let hint = library.betterHint { betterRow(hint) }
                                 if library.allServers.count > 12, query.isEmpty, !library.recent.isEmpty { recentRow }
                                 ForEach(Array(library.subscriptions.enumerated()), id: \.element.id) { index, subscription in
@@ -137,6 +151,7 @@ extension ServersView {
                 Text("По стране").tag("country")
             }
             .pickerStyle(.inline)
+            Toggle("Компактный список", isOn: $compact)
         }
         .menuIndicator(.hidden)
         Button("Добавить", systemImage: "plus") { adding = true }
@@ -365,7 +380,9 @@ private struct ServerRows: View {
     let servers: [ServerConfig]
     var editing: Binding<ServerConfig?>?
     @AppStorage("serverSort") private var sort = "default"
+    @AppStorage("compactServers") private var compact = false
     @State private var heat: ServerConfig?
+    @State private var folded: Set<String> = []
 
     @Environment(\.serverQuery) private var query
 
@@ -380,14 +397,73 @@ private struct ServerRows: View {
         return sorted.filter { library.pinned.contains($0.id) } + sorted.filter { !library.pinned.contains($0.id) }
     }
 
+    /// "По стране": servers grouped by country, each group folds; nil = a flat list.
+    private var groups: [(code: String, servers: [ServerConfig])]? {
+        guard sort == "country", query.isEmpty else { return nil }
+        var order: [String] = [], byCode: [String: [ServerConfig]] = [:]
+        for server in ordered {
+            let code = server.countryCode ?? "—"
+            if byCode[code] == nil { order.append(code) }
+            byCode[code, default: []].append(server)
+        }
+        return order.count > 1 ? order.map { ($0, byCode[$0]!) } : nil
+    }
+
     var body: some View {
         // Lazy: a subscription can hold dozens of servers, and building every row at once made the tab stutter.
         LazyVStack(spacing: 0) {
-            ForEach(ordered) { server in
-                ServerRow(server: server, selected: library.selected?.id == server.id, pinned: library.pinned.contains(server.id), dimmed: library.silent.contains(server.id) && library.selected?.id != server.id, ping: library.pings[server.id], history: library.pingHistory[server.id] ?? []) {
+            if let groups {
+                ForEach(groups, id: \.code) { group in
+                    countryHeader(group.code, servers: group.servers)
+                    if !folded.contains(group.code) { rows(group.servers) }
+                    if group.code != groups.last?.code { Divider().opacity(0.5) }
+                }
+            } else {
+                rows(ordered)
+            }
+        }
+        .sensoryFeedback(.selection, trigger: library.selected?.id)
+        .sheet(item: $heat) { PingHeatmapView(server: $0) }
+    }
+
+    /// Country line: flag, name, how many servers and the best ping among them; tap folds the group.
+    private func countryHeader(_ code: String, servers: [ServerConfig]) -> some View {
+        let best = servers.min { (library.pings[$0.id]?.milliseconds ?? .max) < (library.pings[$1.id]?.milliseconds ?? .max) }
+        let hasSelected = servers.contains { $0.id == library.selected?.id }
+        return Button {
+            withAnimation(.smooth(duration: 0.25)) { if folded.contains(code) { folded.remove(code) } else { folded.insert(code) } }
+        } label: {
+            HStack(spacing: 10) {
+                Text(servers.first?.flag ?? "🌐").font(.title3).frame(width: 32)
+                Text(Locale.current.localizedString(forRegionCode: code) ?? L("Без страны")).font(.subheadline.weight(.semibold)).lineLimit(1)
+                Text("\(servers.count)").font(.footnote.monospacedDigit()).foregroundStyle(.secondary)
+                if hasSelected { Circle().fill(Color.brand).frame(width: 6, height: 6) }
+                Spacer(minLength: 8)
+                if folded.contains(code), let best { PingLabel(ping: library.pings[best.id]) }
+                Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(folded.contains(code) ? -90 : 0))
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(folded.contains(code) ? L("Свёрнуто") : L("Развёрнуто"))
+    }
+
+    @ViewBuilder private func rows(_ list: [ServerConfig]) -> some View {
+            ForEach(list) { server in
+                ServerRow(server: server, selected: library.selected?.id == server.id, pinned: library.pinned.contains(server.id), dimmed: library.silent.contains(server.id) && library.selected?.id != server.id, ping: library.pings[server.id], history: library.pingHistory[server.id] ?? [], compact: compact) {
                     withAnimation(.smooth(duration: 0.25)) { library.selectedID = server.id }
                 }
                 .contextMenu {
+                    Button("Выбрать", systemImage: "checkmark.circle") { withAnimation(.smooth(duration: 0.25)) { library.selectedID = server.id } }
+                        .disabled(library.selected?.id == server.id)
+                    #if os(macOS)
+                    Button(library.routing.entryServerID == server.id ? L("Не использовать как входной") : L("Сделать входным (двойной прыжок)"), systemImage: "point.3.connected.trianglepath.dotted") {
+                        library.routing.entryServerID = library.routing.entryServerID == server.id ? nil : server.id
+                    }
+                    #endif
+                    Divider()
                     Button(library.pinned.contains(server.id) ? L("Открепить") : L("Закрепить"), systemImage: library.pinned.contains(server.id) ? "pin.slash" : "pin") {
                         withAnimation(.smooth) { if library.pinned.contains(server.id) { library.pinned.remove(server.id) } else { library.pinned.insert(server.id) } }
                     }
@@ -399,11 +475,8 @@ private struct ServerRows: View {
                         Button("Удалить", systemImage: "trash", role: .destructive) { library.remove(server) }
                     }
                 }
-                if server.id != ordered.last?.id { Divider().opacity(0.5).padding(.leading, 60) }
+                if server.id != list.last?.id { Divider().opacity(0.5).padding(.leading, 60) }
             }
-        }
-        .sensoryFeedback(.selection, trigger: library.selected?.id)
-        .sheet(item: $heat) { PingHeatmapView(server: $0) }
     }
 }
 
@@ -414,6 +487,7 @@ private struct ServerRow: View {
     var dimmed = false
     let ping: Ping?
     var history: [Int] = []
+    var compact = false
     var onSelect: () -> Void
     @State private var flipped = false
 
@@ -455,7 +529,7 @@ private struct ServerRow: View {
                         Text(server.displayName).font(.body).lineLimit(1)
                         if pinned { Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.secondary) }
                     }
-                    Text(server.summary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    if !compact { Text(server.summary).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                 }
                 Spacer(minLength: 8)
                 if selected, history.count >= 3 { PingSpark(values: history, color: PingLabel.color(for: ping)).transition(.opacity) }
@@ -474,8 +548,9 @@ private struct ServerRow: View {
                 Capsule().fill(CountryColor.of(server.countryCode)).frame(width: 3, height: 26).offset(x: -10).opacity(0.85)
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .frame(minHeight: 48)
+            .padding(.vertical, compact ? 4 : 10)
+            .frame(minHeight: compact ? 34 : 48)
+            .animation(.smooth(duration: 0.25), value: compact)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

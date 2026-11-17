@@ -339,3 +339,21 @@ struct GlassGroup<Content: View>: View {
         }
     }
 }
+
+/// Empty screen: the fox, one line on what will be here, one main action.
+struct EmptyState<Actions: View>: View {
+    let title: LocalizedStringKey
+    let text: LocalizedStringKey
+    @ViewBuilder var actions: Actions
+
+    var body: some View {
+        VStack(spacing: 12) {
+            FoxMark(color: .brand.opacity(0.8)).frame(width: 60)
+            Text(title).font(.display(18, relativeTo: .title3)).padding(.top, 6)
+            Text(text).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 300)
+            actions.padding(.top, 8)
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}

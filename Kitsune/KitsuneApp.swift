@@ -1,6 +1,7 @@
 import NetworkExtension
 import Shared
 import SwiftUI
+import TipKit
 
 @main
 struct KitsuneApp: App {
@@ -14,6 +15,7 @@ struct KitsuneApp: App {
 
     init() {
         BrandFont.register()
+        try? Tips.configure([.displayFrequency(.immediate)])
         // Remember whether this install predates the badge: people who already finished onboarding were here from the early releases.
         let defaults = UserDefaults.standard
         if defaults.string(forKey: "firstVersion") == nil {

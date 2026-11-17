@@ -284,6 +284,11 @@ private struct SitesSection: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
                 }
+                .contextMenu {
+                    Button("Копировать", systemImage: "doc.on.doc") { Clipboard.copy(entry) }
+                    Button("Изменить", systemImage: "pencil") { draft = entry; entries.removeAll { $0 == entry } }
+                    Button("Удалить", systemImage: "trash", role: .destructive) { withAnimation(.smooth) { entries.removeAll { $0 == entry } } }
+                }
             }
             ListRow {
                 TextField("example.com или 1.2.3.0/24", text: $draft)

@@ -5,6 +5,7 @@ import AppKit
 #endif
 import Shared
 import SwiftUI
+import TipKit
 
 /// Main screen: typographic hero (status word / session timer), details, one bar button.
 struct HomeView: View {
@@ -60,7 +61,7 @@ struct HomeView: View {
             }
         case .info: ConnectionInfo(server: server)
         case .speed: SpeedRow(vpn: vpn, accent: theme.accent)
-        case .apps: TopApps(apps: vpn.topApps)
+        case .apps: TopApps(apps: vpn.topApps, library: library)
         }
     }
 
@@ -91,8 +92,8 @@ struct HomeView: View {
                 UpdateBanner().padding(.top, 10)
                 #endif
                 Spacer(minLength: 16)
-                ConnectButton(status: vpn.status, theme: theme, ring: ringColor, season: winterMode ? Season.current : nil, error: hasError, action: toggle, flip: flip, nod: nod, celebrate: celebrate, pulse: pulseColor)
-                StatusCaption(status: vpn.status, hasError: hasError, server: server, connectedDate: vpn.connectedDate) {
+                ConnectButton(status: vpn.status, step: vpn.connectStep, theme: theme, ring: ringColor, season: winterMode ? Season.current : nil, error: hasError, action: toggle, flip: flip, nod: nod, celebrate: celebrate, pulse: pulseColor)
+                StatusCaption(status: vpn.status, step: vpn.connectStep, hasError: hasError, server: server, connectedDate: vpn.connectedDate) {
                     tab = .servers
                 }
                 .padding(.top, 28)
@@ -250,6 +251,7 @@ struct HomeView: View {
 /// Dark glass disc with the fox; a copper ring spins while busy and closes when connected, the disc fills with copper.
 private struct ConnectButton: View {
     let status: NEVPNStatus
+    var step: VPNManager.ConnectStep?
     let theme: ButtonTheme
     let ring: Color
     let season: Season?
@@ -276,6 +278,12 @@ private struct ConnectButton: View {
     private var copper: Color { theme.accent }
     private var busy: Bool { status == .connecting || status == .disconnecting || status == .reasserting }
     private var connected: Bool { status == .connected }
+    /// The ring closes step by step while connecting, then fully.
+    private var ringProgress: Double {
+        if connected { return 1 }
+        if let step { return step.progress }
+        return busy ? 0.3 : 0
+    }
 
     var body: some View {
         Button(action: action) {
@@ -288,8 +296,9 @@ private struct ConnectButton: View {
                         } animation: { _ in .easeOut(duration: 2.2) }
                 }
                 Circle()
-                    .trim(from: 0, to: connected ? 1 : busy ? 0.3 : 0)
+                    .trim(from: 0, to: ringProgress)
                     .stroke(ring, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .animation(.smooth(duration: 0.6), value: step)
                     .rotationEffect(.degrees(spin ? 360 : 0))
                     .padding(-14)
                     .animation(.smooth(duration: 0.8), value: ring)
@@ -430,6 +439,7 @@ private struct SleepZ: View {
 /// change size: an app only fades in or out inside its slot, so nothing overlaps and nothing below shifts.
 private struct TopApps: View {
     let apps: [VPNManager.TopApp]
+    var library: Library?
 
     var body: some View {
         let top = max(1, apps.map(\.rate).max() ?? 1)
@@ -455,6 +465,8 @@ private struct TopApps: View {
                 }
                 .padding(.horizontal, 16)
                 .frame(height: 38)
+                .contentShape(.rect)
+                .contextMenu { if let app, let process = app.process, let library { rules(for: process, library: library) } }
                 .transition(.opacity)
             }
         }
@@ -465,6 +477,24 @@ private struct TopApps: View {
         .animation(.smooth(duration: 0.6), value: apps.map(\.rate))
         .overlay {
             if apps.isEmpty { Text("Пока тихо").font(.footnote).foregroundStyle(.tertiary) }
+            #if os(macOS)
+            if !apps.isEmpty, library != nil { Color.clear.allowsHitTesting(false).popoverTip(AppRulesTip(), arrowEdge: .bottom) }
+            #endif
+        }
+    }
+
+    /// Right-click on an app: send it direct or through the VPN from now on (applies on the next connect).
+    @ViewBuilder private func rules(for process: String, library: Library) -> some View {
+        let direct = library.routing.directApps.contains(process), proxy = library.routing.proxyApps.contains(process)
+        Section(L("Применится при следующем подключении")) {
+            Button(direct ? L("Убрать из «напрямую»") : L("Всегда напрямую"), systemImage: "arrow.right") {
+                library.routing.proxyApps.removeAll { $0 == process }
+                if direct { library.routing.directApps.removeAll { $0 == process } } else { library.routing.directApps.append(process) }
+            }
+            Button(proxy ? L("Убрать из «через VPN»") : L("Всегда через VPN"), systemImage: "lock.shield") {
+                library.routing.directApps.removeAll { $0 == process }
+                if proxy { library.routing.proxyApps.removeAll { $0 == process } } else { library.routing.proxyApps.append(process) }
+            }
         }
     }
 
@@ -504,6 +534,7 @@ private struct PressScale: ButtonStyle {
 /// "Подключить" / "Защищено" with the server (tap to change) and the session timer.
 private struct StatusCaption: View {
     let status: NEVPNStatus
+    var step: VPNManager.ConnectStep?
     let hasError: Bool
     let server: ServerConfig?
     let connectedDate: Date?
@@ -516,6 +547,7 @@ private struct StatusCaption: View {
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
                 .contentTransition(.opacity)
+                .animation(.smooth, value: step)
             Button(action: onServerTap) {
                 HStack(spacing: 6) {
                     if let flag = server?.flag { Text(flag) }
@@ -539,7 +571,7 @@ private struct StatusCaption: View {
         if hasError { return L("Ошибка подключения") }
         return switch status {
         case .connected: L("Защищено")
-        case .connecting, .reasserting: L("Подключение…")
+        case .connecting, .reasserting: step.map { $0.title + "…" } ?? L("Подключение…")
         case .disconnecting: L("Отключение…")
         default: L("Подключить")
         }

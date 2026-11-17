@@ -27,6 +27,20 @@ final class VPNManager {
         }
     }
     private(set) var connectedDate: Date?
+    /// macOS: what the connection is doing right now, shown on the button while connecting.
+    enum ConnectStep: Int, CaseIterable {
+        case prepare, core, handshake
+        var title: String {
+            switch self {
+            case .prepare: L("Готовим настройки")
+            case .core: L("Запускаем ядро")
+            case .handshake: L("Проверяем связь")
+            }
+        }
+        /// How far the ring is closed at this step.
+        var progress: Double { [0.25, 0.55, 0.85][rawValue] }
+    }
+    private(set) var connectStep: ConnectStep?
     /// Live speed (bytes/s) and session totals (bytes), from the core's /traffic stream.
     private(set) var downRate: Int64 = 0
     private(set) var upRate: Int64 = 0
@@ -170,6 +184,8 @@ final class VPNManager {
         let name: String
         /// Path of the .app bundle, for its icon; nil for plain command-line programs.
         let bundle: String?
+        /// Executable name, what a per-app routing rule matches (`process_name`).
+        var process: String? = nil
         var rate: Int64
     }
 
@@ -189,6 +205,7 @@ final class VPNManager {
         // Smoothed rates and a fixed order (first seen stays first), so chips don't jump around or flicker.
         var smooth: [String: Double] = [:]
         var bundles: [String: String] = [:]
+        var processes: [String: String] = [:]
         var order: [String] = []
         var ticks = 0
         while !Task.isCancelled {
@@ -213,6 +230,7 @@ final class VPNManager {
                 current[item.id] = total
                 guard primed, let path = item.metadata?.processPath, !path.isEmpty else { continue }
                 let name = Self.appName(path)
+                processes[name] = processes[name] ?? URL(filePath: path).lastPathComponent
                 perApp[name, default: 0] += max(total - (last[item.id] ?? 0), 0)
                 if let app = path.range(of: ".app/") ?? path.range(of: ".app", options: .backwards) { newBundles[name] = String(path[..<app.upperBound].dropLast(path[app.upperBound...].isEmpty || path.hasSuffix(".app") ? 0 : 1)) }
             }
@@ -231,7 +249,7 @@ final class VPNManager {
                 else if !order.contains(name) { order.append(name) }
             }
             // Three slots, in the order apps appeared; a new one waits for a free slot instead of bumping another out.
-            let shown = Array(order.prefix(3)).map { TopApp(name: $0, bundle: bundles[$0], rate: Int64(smooth[$0] ?? 0)) }
+            let shown = Array(order.prefix(3)).map { TopApp(name: $0, bundle: bundles[$0], process: processes[$0], rate: Int64(smooth[$0] ?? 0)) }
             if shown != topApps { topApps = shown }
         }
     }
@@ -465,6 +483,8 @@ extension VPNManager {
             return
         }
         status = .connecting
+        connectStep = .prepare
+        defer { connectStep = nil }
         lastConnect = (server, servers, routing)
         let dir = Self.coreDir
         let cfg = dir.appending(path: "config.json"), log = dir.appending(path: "core.log"), flag = dir.appending(path: "run")
@@ -513,7 +533,9 @@ extension VPNManager {
             return
         }
         coreProcess = process
-        for _ in 0..<60 {
+        connectStep = .core
+        for attempt in 0..<60 {
+            if attempt == 2 { connectStep = .handshake }
             if !process.isRunning { break }
             if await Self.coreAlive() {
                 status = .connected

@@ -37,6 +37,10 @@ struct HistoryView: View {
             }
             .padding(20)
             ScrollView {
+                if sessions.isEmpty {
+                    EmptyState(title: "Здесь будет история", text: "После первого подключения тут появятся время, трафик и календарь активности.") { EmptyView() }
+                        .padding(.top, 40)
+                } else {
                 VStack(spacing: 18) {
                     summaryCard
                     activityCalendar
@@ -76,6 +80,7 @@ struct HistoryView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 24)
+                }
             }
         }
         .frame(minWidth: 420, minHeight: 560)

@@ -208,7 +208,7 @@ struct SettingsView: View {
         if on && SMAppService.mainApp.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
     }
 
-    private static let prefKeys = ["autoConnect", "autoReconnect", "sounds", "showMenuBar", "notifications", "autoUpdateCheck", "globalHotkey"]
+    private static let prefKeys = ["autoConnect", "autoReconnect", "sounds", "showMenuBar", "notifications", "autoUpdateCheck", "globalHotkey", "compactServers"]
 
     private func exportSettings() {
         let panel = NSSavePanel()

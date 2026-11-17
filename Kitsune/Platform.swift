@@ -44,6 +44,14 @@ enum Clipboard {
         UIPasteboard.general.string = text
         #endif
     }
+
+    static func read() -> String? {
+        #if os(macOS)
+        NSPasteboard.general.string(forType: .string)
+        #else
+        UIPasteboard.general.string
+        #endif
+    }
 }
 
 /// macOS hides large navigation titles under the hidden title bar and folds toolbar buttons behind the tabs,
