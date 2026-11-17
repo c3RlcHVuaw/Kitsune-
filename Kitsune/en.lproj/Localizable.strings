@@ -425,3 +425,4 @@
 "Трафик идёт через два сервера: входной не видит, куда вы заходите, а выходной не знает, кто вы. Скорость ниже, чем с одним сервером. Применяется при следующем подключении." = "Traffic goes through two servers: the entry one can't see where you go, the exit one doesn't know who you are. Slower than a single server. Applies on next connect.";
 "Через входной сервер" = "Route via an entry server";
 "Входной сервер" = "Entry server";
+"В «Маршрутах» трафик можно пустить через два сервера подряд." = "In Routes you can send traffic through two servers in a row.";
