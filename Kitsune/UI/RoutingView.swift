@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 /// Routing profile, one-tap sets, per-app rules and the user's own site lists, as native-style grouped lists.
 struct RoutingView: View {
     let library: Library
+    @State private var scroll = ScrollPosition(edge: .top)
 
     var body: some View {
         NavigationStack {
@@ -36,7 +37,9 @@ struct RoutingView: View {
                     .padding(.bottom, 24)
                 }
                 .scrollDismissesKeyboard(.interactively)
+                .rememberScroll("routing", position: $scroll)
             }
+            .readableWidth()
             .iOSNavigation(title: "Маршруты") { EmptyView() }
         }
     }

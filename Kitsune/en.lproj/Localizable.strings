@@ -553,3 +553,12 @@
 "Перед добавлением видно, что внутри: серверы, страны, трафик и срок." = "Before adding, see what's inside: servers, countries, traffic and expiry.";
 "Подсказки и примеры" = "Hints and examples";
 "Значок «?» у сложных настроек, примеры сайтов в маршрутах и понятный таймер сессии." = "A “?” next to tricky settings, example sites in Routes and a friendlier session timer.";
+"Наверх" = "Back to top";
+"Вкладки со смыслом" = "Tabs that make sense";
+"Разделы въезжают с той стороны, где стоят в панели." = "Sections slide in from the side they sit on in the tab bar.";
+"Кнопка «Наверх»" = "“Back to top” button";
+"В длинном списке серверов одна кнопка возвращает к началу." = "In a long server list one button brings you back to the start.";
+"Выбранный сервер под рукой" = "Your server within reach";
+"Если он ушёл за край, сверху появляется его капсула: клик вернёт к нему." = "When it scrolls away, a capsule appears on top: a click brings you back to it.";
+"Память прокрутки" = "Scroll memory";
+"Вернулись на «Серверы» или «Маршруты» и оказались там же, где были." = "Come back to Servers or Routes and land where you left off.";

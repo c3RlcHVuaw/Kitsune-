@@ -113,6 +113,7 @@ struct SettingsView: View {
                     .padding(.bottom, 24)
                 }
             }
+            .readableWidth()
             .iOSNavigation(title: "Настройки") { EmptyView() }
             .task {
                 while !Task.isCancelled {

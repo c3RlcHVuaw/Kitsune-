@@ -6,6 +6,9 @@ extension EnvironmentValues {
     @Entry var serverQuery = ""
 }
 
+/// Whether the selected server's row is on screen; when it scrolls away, a pinned copy appears at the top.
+@MainActor @Observable final class SelectedRowVisibility { var visible = true }
+
 /// Subscriptions and manual servers: refresh, traffic, expiry, announcements, ping, selection.
 struct ServersView: View {
     let library: Library
@@ -19,6 +22,9 @@ struct ServersView: View {
     @AppStorage("compactServers") var compact = false
     @AppStorage("hideSilent") var hideSilent = false
     @State private var pasteError: String?
+    @State private var scroll = ScrollPosition(edge: .top)
+    @State private var offset: CGFloat = 0
+    @State private var selectedRow = SelectedRowVisibility()
 
     /// Adds whatever link is on the clipboard; without one, opens the manual form.
     private func pasteFromClipboard() {
@@ -97,9 +103,11 @@ struct ServersView: View {
                         }
                     }
                 } else {
+                    ScrollViewReader { proxy in
                     ScrollView {
                         Group {
                             LazyVStack(spacing: 22) {
+                                Color.clear.frame(height: 0).id("top")
                                 if library.allServers.count > 12 { searchField }
                                 TipView(ServerActionsTip()).tipBackground(.clear).kGlass(in: .rect(cornerRadius: 20))
                                 if let hint = library.betterHint { betterRow(hint) }
@@ -119,8 +127,46 @@ struct ServersView: View {
                     .refreshable {
                         for subscription in library.subscriptions { await library.refresh(subscription.id) }
                     }
+                    .rememberScroll("servers", position: $scroll) { offset = $0 }
+                    .environment(selectedRow)
+                    .onChange(of: library.selected?.id) { selectedRow.visible = true }
+                    .overlay(alignment: .top) {
+                        // The chosen server scrolled out of sight: a pinned copy, a click brings the list back to it.
+                        if !selectedRow.visible, let selected = library.selected {
+                            Button { withAnimation(.smooth) { proxy.scrollTo(selected.id, anchor: .center) } } label: {
+                                HStack(spacing: 8) {
+                                    Text(selected.flag ?? "🌐")
+                                    Text(selected.displayName).font(.subheadline.weight(.medium)).lineLimit(1)
+                                    PingLabel(ping: library.pings[selected.id])
+                                    Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(Color.brand)
+                                }
+                                .padding(.horizontal, 14).padding(.vertical, 8)
+                                .kGlass(in: .capsule, interactive: true)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 6)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+                    }
+                    .overlay(alignment: .bottomTrailing) {
+                        if offset > 500 {
+                            Button { withAnimation(.smooth) { proxy.scrollTo("top", anchor: .top) } } label: {
+                                Image(systemName: "arrow.up").font(.body.weight(.semibold))
+                                    .frame(width: 38, height: 38)
+                                    .kGlass(in: .circle, interactive: true)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Наверх")
+                            .padding(.trailing, 20).padding(.bottom, 16)
+                            .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                    .animation(.smooth, value: offset > 500)
+                    .animation(.smooth, value: selectedRow.visible)
+                    }
                 }
                 }
+                .readableWidth()
             }
             .iOSNavigation(title: "Серверы", subtitle: pingSubtitle) { toolbarActions }
             .sheet(isPresented: $adding) { AddSheet(library: library) }
@@ -413,6 +459,7 @@ private struct ServerRows: View {
     @State private var heat: ServerConfig?
     @State private var folded: Set<String> = []
     @State private var showSilent = false
+    @Environment(SelectedRowVisibility.self) private var selectedRow: SelectedRowVisibility?
 
     /// Servers that failed three checks in a row go to a folded "Не отвечают" group at the bottom (never the selected one).
     private var silentOnes: [ServerConfig] {
@@ -512,6 +559,10 @@ private struct ServerRows: View {
             ForEach(list) { server in
                 ServerRow(server: server, selected: library.selected?.id == server.id, pinned: library.pinned.contains(server.id), dimmed: library.silent.contains(server.id) && library.selected?.id != server.id, ping: library.pings[server.id], history: library.pingHistory[server.id] ?? [], compact: compact) {
                     withAnimation(.smooth(duration: 0.25)) { library.selectedID = server.id }
+                }
+                .id(server.id)
+                .onScrollVisibilityChange(threshold: 0.3) { visible in
+                    if library.selected?.id == server.id { selectedRow?.visible = visible }
                 }
                 .contextMenu {
                     Button("Выбрать", systemImage: "checkmark.circle") { withAnimation(.smooth(duration: 0.25)) { library.selectedID = server.id } }

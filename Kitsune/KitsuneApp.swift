@@ -140,6 +140,8 @@ struct RootView: View {
     /// A window wide enough for two screens: Home keeps its width and the server list sits next to it.
     @State private var wide = false
     #endif
+    /// The new tab slides in from the side it sits on in the tab bar.
+    @State private var forward = true
 
     var body: some View {
         Group {
@@ -150,7 +152,11 @@ struct RootView: View {
                     .toolbar {
                         // Native toolbar segmented control: titles when there is room, icons when the window is narrow.
                         ToolbarItem(placement: .principal) {
-                            Picker("Раздел", selection: $tab) {
+                            Picker("Раздел", selection: Binding(get: { tab }, set: { new in
+                                // Direction first, in the same update as the switch, so the slide goes the right way.
+                                forward = (AppTab.allCases.firstIndex(of: new) ?? 0) >= (AppTab.allCases.firstIndex(of: tab) ?? 0)
+                                tab = new
+                            })) {
                                 ForEach(AppTab.allCases, id: \.self) { item in
                                     Group {
                                         if compact { Image(systemName: item.icon) } else { Text(item.title) }
@@ -243,7 +249,9 @@ struct RootView: View {
             }
         }
         .id(item)
-        .transition(.blurReplace)
+        .transition(.asymmetric(
+            insertion: .offset(x: forward ? 40 : -40).combined(with: .opacity),
+            removal: .offset(x: forward ? -40 : 40).combined(with: .opacity)))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.smooth(duration: 0.3), value: item)
         .background {

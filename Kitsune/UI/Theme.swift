@@ -539,3 +539,47 @@ extension ButtonTheme {
                                             center: UnitPoint(x: 0.35, y: 0.28), startRadius: 0, endRadius: 140))
     }
 }
+
+/// Where each list was scrolled: tabs are rebuilt on every switch, so coming back would otherwise start at the top.
+@MainActor enum ScrollMemory { static var offsets: [String: CGFloat] = [:] }
+
+private struct RememberScroll: ViewModifier {
+    let key: String
+    @Binding var position: ScrollPosition
+    let onOffset: (CGFloat) -> Void
+    /// Read when the screen is built: the fresh scroll view reports 0 first and would overwrite it.
+    @State private var target: CGFloat?
+    @State private var restored = false
+
+    init(key: String, position: Binding<ScrollPosition>, onOffset: @escaping (CGFloat) -> Void) {
+        self.key = key
+        _position = position
+        self.onOffset = onOffset
+        _target = State(initialValue: ScrollMemory.offsets[key])
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .scrollPosition($position)
+            .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, y in
+                onOffset(y)
+                if restored { ScrollMemory.offsets[key] = y }
+            }
+            .task {
+                defer { restored = true }
+                guard let y = target, y > 1 else { return }
+                try? await Task.sleep(for: .milliseconds(80)) // lazy content needs a pass to lay out first
+                position.scrollTo(y: y)
+                try? await Task.sleep(for: .milliseconds(80))
+            }
+    }
+}
+
+extension View {
+    func rememberScroll(_ key: String, position: Binding<ScrollPosition>, onOffset: @escaping (CGFloat) -> Void = { _ in }) -> some View {
+        modifier(RememberScroll(key: key, position: position, onOffset: onOffset))
+    }
+
+    /// One readable column, centred, when the window is stretched wide.
+    func readableWidth(_ width: CGFloat = 620) -> some View { frame(maxWidth: width).frame(maxWidth: .infinity) }
+}
