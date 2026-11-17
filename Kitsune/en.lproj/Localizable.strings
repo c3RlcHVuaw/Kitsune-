@@ -450,3 +450,11 @@
 "Удалить" = "Delete";
 "Здесь будет история" = "History will appear here";
 "После первого подключения тут появятся время, трафик и календарь активности." = "After your first connection you'll see time, traffic and an activity calendar here.";
+"Видно, что происходит" = "See what's happening";
+"При подключении кнопка показывает этапы, а кольцо закрывается по шагам." = "While connecting, the button shows each step and the ring closes as it goes.";
+"Серверы по странам" = "Servers by country";
+"Сортировка «По стране» собирает группы, их можно сворачивать. Есть компактный список." = "Sorting by country makes foldable groups. There's a compact list too.";
+"Правый клик везде" = "Right-click everywhere";
+"Меню у серверов, приложений на главной и сайтов в маршрутах." = "Menus on servers, apps on Home and sites in Routes.";
+"Правила из главной" = "Rules from Home";
+"Приложение из списка можно сразу отправить напрямую или через VPN." = "Send an app from the list direct or through the VPN right away.";
