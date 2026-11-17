@@ -571,3 +571,13 @@
 "В этот период тихо" = "A quiet period";
 "Подключений за выбранные дни не было." = "There were no connections in the chosen days.";
 "Показать всё время" = "Show all time";
+"Тема красит всё" = "The theme colours everything";
+"Выбранный цвет теперь везде: переключатели, списки, графики, плашки, а не только кнопка подключения." = "Your chosen colour is now everywhere: switches, lists, charts and banners, not only the connect button.";
+"Карта серверов" = "Servers map";
+"На «Серверах» кнопка «Карта»: метки стран по цвету лучшего пинга, тап приближает и показывает серверы страны." = "Servers has a Map button: country pins coloured by best ping; tap to zoom in and see that country's servers.";
+"Свайп по строке" = "Swipe on a row";
+"Вправо закрепить сервер, влево удалить (свои серверы, с подтверждением)." = "Swipe right to pin a server, left to delete (your own servers, with confirmation).";
+"Фон оживает" = "A living background";
+"В покое холодное свечение, при подключении оно плавно теплеет до цвета темы." = "A cool glow at rest that smoothly warms to the theme colour when connected.";
+"Тихие звуки и пустые экраны" = "Quiet sounds and empty screens";
+"Тик при выборе сервера, нота при ошибке, живая лиса на пустых экранах и в пустом поиске." = "A tick when you pick a server, a low note on errors, and a lively fox on empty screens and empty search.";
