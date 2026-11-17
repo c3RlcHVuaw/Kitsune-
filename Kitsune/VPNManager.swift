@@ -206,6 +206,9 @@ final class VPNManager {
         var smooth: [String: Double] = [:]
         var bundles: [String: String] = [:]
         var processes: [String: String] = [:]
+        /// One program can show up under several spellings (an app and its helper or CLI): rows are keyed by the
+        /// lowercased name and shown under the .app spelling when there is one.
+        var displayNames: [String: String] = [:]
         var order: [String] = []
         var ticks = 0
         while !Task.isCancelled {
@@ -229,7 +232,9 @@ final class VPNManager {
                 let total = item.upload + item.download
                 current[item.id] = total
                 guard primed, let path = item.metadata?.processPath, !path.isEmpty else { continue }
-                let name = Self.appName(path)
+                let raw = Self.appName(path)
+                let name = raw.lowercased()
+                if displayNames[name] == nil || path.contains(".app") { displayNames[name] = raw }
                 processes[name] = processes[name] ?? URL(filePath: path).lastPathComponent
                 perApp[name, default: 0] += max(total - (last[item.id] ?? 0), 0)
                 if let app = path.range(of: ".app/") ?? path.range(of: ".app", options: .backwards) { newBundles[name] = String(path[..<app.upperBound].dropLast(path[app.upperBound...].isEmpty || path.hasSuffix(".app") ? 0 : 1)) }
@@ -239,7 +244,7 @@ final class VPNManager {
             primed = true
             guard wasPrimed else { continue }
             bundles.merge(newBundles) { $1 }
-            for (name, bytes) in perApp { AppTraffic.add(name, bytes: bytes) }
+            for (name, bytes) in perApp { AppTraffic.add(displayNames[name] ?? name, bytes: bytes) }
             ticks += 1
             if ticks % 15 == 0 { AppTraffic.save() }
             for name in Set(smooth.keys).union(perApp.keys) {
@@ -249,7 +254,7 @@ final class VPNManager {
                 else if !order.contains(name) { order.append(name) }
             }
             // Three slots, in the order apps appeared; a new one waits for a free slot instead of bumping another out.
-            let shown = Array(order.prefix(3)).map { TopApp(name: $0, bundle: bundles[$0], process: processes[$0], rate: Int64(smooth[$0] ?? 0)) }
+            let shown = Array(order.prefix(3)).map { TopApp(name: displayNames[$0] ?? $0, bundle: bundles[$0], process: processes[$0], rate: Int64(smooth[$0] ?? 0)) }
             if shown != topApps { topApps = shown }
         }
     }

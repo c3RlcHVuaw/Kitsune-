@@ -112,6 +112,12 @@ struct HomeView: View {
                     tab = .servers
                 }
                 .padding(.top, 28 * heroScale)
+                if !vpn.status.isActive, !hasError, let last = History.sessions.last(where: { $0.duration >= 120 }) { // blips after a restart are noise
+                    Text(Self.lastSession(last))
+                        .font(.footnote).foregroundStyle(.secondary).monospacedDigit()
+                        .padding(.top, 10)
+                        .transition(.opacity)
+                }
                 if vpn.status == .connected, !hasError {
                     VStack(spacing: 8) {
                         if let notice = vpn.notice {
@@ -234,6 +240,15 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showDiagnostics) { DiagnosticsView(vpn: vpn, server: server?.displayName) }
         #endif
+    }
+
+    /// "Последняя сессия: вчера · 3 ч 12 мин · 2,1 ГБ" under the idle button.
+    private static func lastSession(_ session: History.Session) -> String {
+        let when = session.start.formatted(.relative(presentation: .named))
+        let length = Duration.seconds(max(60, session.duration)).formatted(.units(allowed: [.hours, .minutes], width: .abbreviated))
+        let bytes = session.down + session.up
+        guard bytes > 0 else { return String(format: L("Последняя сессия: %@ · %@"), when, length) } // sessions before 1.8.8 kept no traffic
+        return String(format: L("Последняя сессия: %@ · %@ · %@"), when, length, ByteCountFormatter.string(fromByteCount: bytes, countStyle: .binary))
     }
 
     /// Moves the live tunnel to another server without reconnecting.
@@ -824,44 +839,43 @@ private struct SpeedRow: View {
     }
     private var peak: Double { max(100_000, bars.map { max($0.down, $0.up) }.max() ?? 0) }
 
+    /// One line: download on the left, the last minute as thin bars in the middle, upload on the right.
     var body: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 0) {
-                column("arrow.down", L("загрузка"), vpn.downRate, vpn.downTotal, down)
-                Rectangle().fill(.white.opacity(0.08)).frame(width: 1, height: 44)
-                column("arrow.up", L("отдача"), vpn.upRate, vpn.upTotal, up)
-            }
+        HStack(spacing: 14) {
+            column("arrow.down", L("загрузка"), vpn.downRate, vpn.downTotal, down, alignment: .leading)
             Chart(bars) { bar in
-                BarMark(x: .value("t", bar.id), y: .value("down", bar.down), width: .fixed(5))
-                    .cornerRadius(2.5)
+                BarMark(x: .value("t", bar.id), y: .value("down", bar.down), width: .fixed(3))
+                    .cornerRadius(1.5)
                     .foregroundStyle(down.opacity(0.85))
-                BarMark(x: .value("t", bar.id), y: .value("up", bar.up), width: .fixed(5))
-                    .cornerRadius(2.5)
+                BarMark(x: .value("t", bar.id), y: .value("up", bar.up), width: .fixed(3))
+                    .cornerRadius(1.5)
                     .foregroundStyle(up.opacity(0.35))
             }
             .chartXScale(domain: -0.5...29.5)
             .chartYScale(domain: 0...peak * 1.1)
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
-            .frame(height: 44)
+            .frame(height: 34)
+            .frame(maxWidth: .infinity)
             .opacity(0.9)
+            column("arrow.up", L("отдача"), vpn.upRate, vpn.upTotal, up, alignment: .trailing)
         }
-        .padding(.horizontal, 16).padding(.vertical, 14)
+        .padding(.horizontal, 16).padding(.vertical, 12)
         .kGlass(in: .rect(cornerRadius: 22))
         .accessibilityElement(children: .combine)
     }
 
-    private func column(_ icon: String, _ title: String, _ rate: Int64, _ total: Int64, _ color: Color) -> some View {
-        VStack(spacing: 3) {
+    private func column(_ icon: String, _ title: String, _ rate: Int64, _ total: Int64, _ color: Color, alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 2) {
             Label(title, systemImage: icon).font(.caption2).foregroundStyle(.secondary).labelStyle(.titleAndIcon)
             Text(Self.rate(rate))
-                .font(.system(size: 21, weight: .semibold, design: .rounded).monospacedDigit())
+                .font(.system(size: 19, weight: .semibold, design: .rounded).monospacedDigit())
                 .foregroundStyle(color)
                 .contentTransition(.numericText())
                 .animation(.smooth(duration: 0.3), value: rate)
             Text(Self.bytes(total)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity)
+        .frame(width: 96, alignment: alignment == .leading ? .leading : .trailing) // fixed: changing digits never move the bars
     }
 
     private static func bytes(_ value: Int64) -> String { ByteCountFormatter.string(fromByteCount: value, countStyle: .binary) }

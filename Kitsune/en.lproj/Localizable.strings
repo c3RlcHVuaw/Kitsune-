@@ -509,3 +509,13 @@
 "IP, DNS и IPv6: сразу видно, всё ли в порядке." = "IP, DNS and IPv6: see at a glance that all is well.";
 "Главная без прокрутки" = "Home without scrolling";
 "Когда появляются карточки, кнопка с лисой плавно уменьшается, и всё помещается в окно." = "When the cards appear, the fox button gently shrinks so everything fits the window.";
+"Последняя сессия: %@ · %@ · %@" = "Last session: %@ · %@ · %@";
+"Последняя сессия: %@ · %@" = "Last session: %@ · %@";
+"Скорость в одну строку" = "Speed on one line";
+"Загрузка, отдача и график за минуту в компактной карточке." = "Download, upload and the last minute's chart in a compact card.";
+"Последняя сессия" = "Last session";
+"Когда VPN выключен, под кнопкой видно, когда и сколько вы были под защитой." = "When the VPN is off, the button shows when and for how long you were protected.";
+"Без дублей в топе" = "No duplicates in Top apps";
+"Одно приложение больше не занимает две строки в «Сейчас пользуются»." = "One app no longer takes two rows in “In use now”.";
+"История считает трафик" = "History counts traffic";
+"Раньше сессии сохранялись без объёма, теперь трафик записывается." = "Sessions used to be saved without traffic; now it is recorded.";
