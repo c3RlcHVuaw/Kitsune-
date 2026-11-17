@@ -30,6 +30,18 @@ struct HomeView: View {
     @State private var nod = 0
     @State private var taps = 0
     @State private var flip = 0
+    /// The fox button shrinks (down to 60%) so the cards below fit the window without scrolling.
+    @State private var heroScale: CGFloat = 1
+    @State private var fit = Fit()
+    private struct Fit: Equatable { var content: CGFloat = 0, top: CGFloat = 16, bottom: CGFloat = 16 }
+
+    /// Everything except the button and the two flexible gaps is fixed, so the right size follows in one step, without jitter.
+    private func refit(available: CGFloat) {
+        guard fit.content > 0, available > 0 else { return }
+        let rest = fit.content - 228 * heroScale - fit.top - fit.bottom // button 200 + caption gap 28, both scale
+        let target = min(1, max(0.6, (available - rest - 32) / 228))
+        if abs(target - heroScale) > 0.01 { withAnimation(.smooth(duration: 0.45)) { heroScale = target } }
+    }
 
     private var theme: ButtonTheme { ButtonTheme(rawValue: themeRaw) ?? .copper }
     private var server: ServerConfig? { library.selected }
@@ -66,7 +78,7 @@ struct HomeView: View {
     }
 
     var body: some View {
-        // Scrolls (no indicator, no bounce when it fits) once the update banner or the stats cards push the content past the window.
+        // The fox button shrinks first so everything fits; scrolling (no indicator, no bounce) is only the last resort.
         GeometryReader { geo in ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 0) {
                 ZStack {
@@ -92,11 +104,14 @@ struct HomeView: View {
                 UpdateBanner().padding(.top, 10)
                 #endif
                 Spacer(minLength: 16)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fit.top = $0 }
                 ConnectButton(status: vpn.status, step: vpn.connectStep, theme: theme, ring: ringColor, season: winterMode ? Season.current : nil, error: hasError, action: toggle, flip: flip, nod: nod, celebrate: celebrate, pulse: pulseColor)
+                    .scaleEffect(heroScale)
+                    .frame(width: 200 * heroScale, height: 200 * heroScale)
                 StatusCaption(status: vpn.status, step: vpn.connectStep, hasError: hasError, server: server, connectedDate: vpn.connectedDate) {
                     tab = .servers
                 }
-                .padding(.top, 28)
+                .padding(.top, 28 * heroScale)
                 if vpn.status == .connected, !hasError {
                     VStack(spacing: 8) {
                         if let notice = vpn.notice {
@@ -141,12 +156,16 @@ struct HomeView: View {
                 .padding(.top, 20)
                 .transition(.blurReplace)
                 Spacer(minLength: 16)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fit.bottom = $0 }
                 ProfileChip(profile: Binding(get: { library.routing.profile }, set: { library.routing.profile = $0 }))
                     .padding(.bottom, 12)
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 20)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fit.content = $0 }
             .frame(minHeight: geo.size.height)
+            .onChange(of: fit) { refit(available: geo.size.height) }
+            .onChange(of: geo.size.height) { refit(available: geo.size.height) }
         }
         .scrollBounceBehavior(.basedOnSize)
         .scrollClipDisabled() }
