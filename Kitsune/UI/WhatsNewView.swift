@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Shown once after an update (never on the very first launch) and from Settings.
 struct WhatsNewView: View {
+    @Environment(\.kitsuneTheme) private var theme
     @Environment(\.dismiss) private var dismiss
 
     private let items: [(icon: String, color: Color, title: String, text: String)] = [
@@ -14,7 +15,7 @@ struct WhatsNewView: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            FoxMark(color: .brand).frame(width: 52)
+            FoxMark(color: theme.accent).frame(width: 52)
             Text("Что нового").font(.display(22, relativeTo: .title))
             VStack(alignment: .leading, spacing: 14) {
                 ForEach(items, id: \.title) { item in

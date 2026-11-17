@@ -11,7 +11,8 @@ struct HistoryView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var period = Period.week
     @State private var sessions = History.sessions
-    private let accent = Color(red: 1.0, green: 0.50, blue: 0.10)
+    @Environment(\.kitsuneTheme) private var theme
+    private var accent: Color { theme.accent }
 
     private var shown: [History.Session] {
         guard let days = period.days, let from = Calendar.current.date(byAdding: .day, value: -(days - 1), to: Calendar.current.startOfDay(for: .now)) else { return sessions }
@@ -38,7 +39,7 @@ struct HistoryView: View {
             .padding(20)
             ScrollView {
                 if sessions.isEmpty {
-                    EmptyState(title: "Здесь будет история", text: "После первого подключения тут появятся время, трафик и календарь активности.") { EmptyView() }
+                    EmptyState(title: "Здесь будет история", text: "После первого подключения тут появятся время, трафик и календарь активности.", symbol: "clock.arrow.circlepath") { EmptyView() }
                         .padding(.top, 40)
                 } else {
                 VStack(spacing: 18) {
@@ -54,7 +55,10 @@ struct HistoryView: View {
                         }
                     }
                     if shown.isEmpty {
-                        Text("Пока нет подключений за этот период.").font(.footnote).foregroundStyle(.secondary).padding(.top, 8)
+                        EmptyState(title: "В этот период тихо", text: "Подключений за выбранные дни не было.", symbol: "calendar") {
+                            Button("Показать всё время") { withAnimation(.smooth) { period = .all } }.buttonStyle(.brand)
+                        }
+                        .frame(height: 260)
                     } else {
                         ListSection(title: "Подключения") {
                             ForEach(shown.reversed().prefix(60)) { session in

@@ -16,15 +16,25 @@ struct KitsuneBackground: View {
         FlowingGradient(animated: !reduceMotion && mood != .error,
                         paused: !active,
                         intensity: intensity,
+                        warmth: warmth,
                         alarm: mood == .error,
                         theme: ButtonTheme(rawValue: themeRaw) ?? .copper)
             .ignoresSafeArea()
             .animation(.easeInOut(duration: 1.1), value: mood)
     }
 
-    private var intensity: Double {
+    /// 0 is a cold steel glow at rest, 1 the full theme colour: the background warms up as the tunnel comes up.
+    private var warmth: Double {
         switch mood {
         case .idle: 0
+        case .connecting: 0.55
+        case .connected, .error: 1
+        }
+    }
+
+    private var intensity: Double {
+        switch mood {
+        case .idle: 0.28
         case .connecting: 0.6
         case .connected: 1
         case .error: 0.7
@@ -34,14 +44,24 @@ struct KitsuneBackground: View {
 
 /// Almost flat near-black with a faint top light. No colour blobs (they read as "AI wallpaper"): the only colour is
 /// one restrained copper glow behind the connect button that appears with the tunnel and breathes slowly.
-private struct FlowingGradient: View {
+private struct FlowingGradient: View, @preconcurrency Animatable {
     let animated: Bool
     let paused: Bool
     var intensity = 1.0
+    var warmth = 1.0
     var alarm = false
     var theme = ButtonTheme.copper
 
-    private var tint: Color { alarm ? Color(red: 0.75, green: 0.16, blue: 0.16) : theme.glow }
+    // Both values are interpolated by SwiftUI, so the glow cools and warms smoothly instead of switching.
+    var animatableData: AnimatablePair<Double, Double> {
+        get { AnimatablePair(intensity, warmth) }
+        set { intensity = newValue.first; warmth = newValue.second }
+    }
+
+    private static let cold = Color(red: 0.36, green: 0.44, blue: 0.58)
+    private var tint: Color {
+        alarm ? Color(red: 0.75, green: 0.16, blue: 0.16) : Self.cold.mix(with: theme.glow, by: warmth)
+    }
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 20, paused: !animated || paused)) { context in

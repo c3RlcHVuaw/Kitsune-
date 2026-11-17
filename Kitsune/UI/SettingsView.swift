@@ -367,7 +367,7 @@ struct SettingsView: View {
                     ForEach(ButtonTheme.allCases, id: \.self) { item in
                         let open = item.isUnlocked
                         Button {
-                            if open { withAnimation(.smooth) { themeRaw = item.rawValue } }
+                            if open { withAnimation(.smooth) { themeRaw = item.rawValue }; Feedback.sound(item.sounds.connect, volume: 0.35) }
                             else { Toaster.shared.show(String(format: L("«%@» откроется на звании «%@»"), item.name, History.rankTitles[item.unlockLevel])) }
                         } label: {
                             Circle().fill(item.swatch).frame(width: 22, height: 22)
@@ -641,7 +641,7 @@ struct SettingsView: View {
         return "\(info?["CFBundleShortVersionString"] as? String ?? "?") (\(info?["CFBundleVersion"] as? String ?? "?"))"
     }
 
-    private let accent = Color(red: 1.0, green: 0.50, blue: 0.10)
+    private var accent: Color { theme.accent }
     private let muted = Color.white.opacity(0.28)
 
     #if os(macOS)

@@ -245,7 +245,6 @@
 "Неделя" = "Week";
 "Всё время" = "All time";
 "Подключения" = "Connections";
-"Пока нет подключений за этот период." = "No connections in this period yet.";
 "Очистить историю" = "Clear history";
 "%lld ч %lld мин" = "%lld h %lld min";
 "%lld мин" = "%lld min";
@@ -562,3 +561,13 @@
 "Если он ушёл за край, сверху появляется его капсула: клик вернёт к нему." = "When it scrolls away, a capsule appears on top: a click brings you back to it.";
 "Память прокрутки" = "Scroll memory";
 "Вернулись на «Серверы» или «Маршруты» и оказались там же, где были." = "Come back to Servers or Routes and land where you left off.";
+"Карта" = "Map";
+"Список" = "List";
+"Нажмите на метку страны. Серверов без страны: %lld" = "Tap a country pin. Servers without a country: %lld";
+"Нажмите на метку страны, чтобы увидеть её серверы" = "Tap a country pin to see its servers";
+"Ничего не нашлось" = "Nothing found";
+"Попробуйте другое название, страну или адрес." = "Try another name, country or address.";
+"Очистить поиск" = "Clear search";
+"В этот период тихо" = "A quiet period";
+"Подключений за выбранные дни не было." = "There were no connections in the chosen days.";
+"Показать всё время" = "Show all time";

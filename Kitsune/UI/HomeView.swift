@@ -14,8 +14,6 @@ struct HomeView: View {
     @Binding var tab: AppTab
     #if os(macOS)
     @State private var showDiagnostics = false
-    @AppStorage("sounds") private var sounds = true
-    @AppStorage("haptics") private var haptics = true
     #endif
 
     @AppStorage("buttonTheme") private var themeRaw = "copper"
@@ -230,16 +228,13 @@ struct HomeView: View {
         }
         #if os(macOS)
         .onChange(of: vpn.status) { old, new in
-            // Soft system sounds on connect and on a user-driven disconnect.
-            if haptics {
-                // A quiet click on connect, a firmer one when the tunnel drops by itself (only felt while a finger is on the trackpad).
-                let performer = NSHapticFeedbackManager.defaultPerformer
-                if new == .connected { performer.perform(.alignment, performanceTime: .now) }
-                else if new == .disconnected, old != .disconnecting { performer.perform(.levelChange, performanceTime: .now) }
-            }
-            guard sounds else { return }
-            if new == .connected { NSSound(named: theme.sounds.connect)?.play() }
-            else if new == .disconnected, old == .disconnecting { NSSound(named: theme.sounds.disconnect)?.play() }
+            // A quiet click on connect, a firmer one when the tunnel drops by itself; soft sounds on connect, on a user-driven
+            // disconnect and (a low note) on a failed attempt.
+            if new == .connected { Feedback.tap() }
+            else if new == .disconnected, old != .disconnecting { Feedback.tap(firm: true) }
+            if new == .connected { Feedback.sound(theme.sounds.connect) }
+            else if new == .disconnected, old == .disconnecting { Feedback.sound(theme.sounds.disconnect) }
+            else if new == .disconnected, hasError { Feedback.sound("Basso", volume: 0.35) }
         }
         .sheet(isPresented: $showDiagnostics) { DiagnosticsView(vpn: vpn, server: server?.displayName) }
         #endif
@@ -509,6 +504,7 @@ private struct SleepZ: View {
 /// Who is using the connection right now: three fixed slots with the app icon, name and speed. The slots never move or
 /// change size: an app only fades in or out inside its slot, so nothing overlaps and nothing below shifts.
 private struct TopApps: View {
+    @Environment(\.kitsuneTheme) private var theme
     let apps: [VPNManager.TopApp]
     var library: Library?
 
@@ -524,7 +520,7 @@ private struct TopApps: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Capsule().fill(.white.opacity(0.1)).frame(width: 54, height: 4)
                             .overlay(alignment: .leading) {
-                                Capsule().fill(Color.brand.opacity(0.85))
+                                Capsule().fill(theme.accent.opacity(0.85))
                                     .frame(width: max(4, 54 * Double(app.rate) / Double(top)))
                             }
                         Text(ByteCountFormatter.string(fromByteCount: app.rate, countStyle: .binary) + L("/с"))
@@ -676,6 +672,7 @@ private struct StatusCaption: View {
 
 /// On: Russia direct (filled white). Off: everything through VPN. The custom profile lives on the Routes tab.
 private struct ProfileChip: View {
+    @Environment(\.kitsuneTheme) private var theme
     @Binding var profile: RoutingSettings.Profile
     private var on: Bool { profile == .russiaDirect }
 
@@ -687,11 +684,11 @@ private struct ProfileChip: View {
                 .symbolEffect(.bounce, value: on)
                 .contentTransition(.symbolEffect(.replace))
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(on ? Color(red: 0.96, green: 0.80, blue: 0.62) : .white.opacity(0.7))
+                .foregroundStyle(on ? theme.soft : .white.opacity(0.7))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(on ? Color(red: 1.0, green: 0.50, blue: 0.10).opacity(0.18) : .clear, in: .capsule)
-                .overlay(Capsule().stroke(on ? Color(red: 1.0, green: 0.50, blue: 0.10).opacity(0.5) : .white.opacity(0.15), lineWidth: 0.6))
+                .background(on ? theme.accent.opacity(0.18) : .clear, in: .capsule)
+                .overlay(Capsule().stroke(on ? theme.accent.opacity(0.5) : .white.opacity(0.15), lineWidth: 0.6))
         }
         .buttonStyle(.plain)
         .kGlass(in: .capsule, interactive: true)
@@ -1037,6 +1034,7 @@ private struct ClipboardOffer: View {
 /// "Доступно обновление": appears on Home when a newer release exists; one tap downloads (with progress), replaces the app,
 /// reopens it and brings the VPN back if it was on.
 struct UpdateBanner: View {
+    @Environment(\.kitsuneTheme) private var theme
     private var updater: Updater { .shared }
 
     var body: some View {
@@ -1050,7 +1048,7 @@ struct UpdateBanner: View {
     private func card(title: LocalizedStringKey, subtitle: LocalizedStringKey, busy: Bool) -> some View {
         VStack(spacing: 10) {
             HStack(spacing: 12) {
-                Image(systemName: "arrow.down.circle.fill").font(.title2).foregroundStyle(Color.brand)
+                Image(systemName: "arrow.down.circle.fill").font(.title2).foregroundStyle(theme.accent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.subheadline.weight(.semibold))
                     Text(subtitle).font(.caption).foregroundStyle(updater.installError == nil || busy ? Color.secondary : Color.alert).lineLimit(2)
@@ -1067,12 +1065,12 @@ struct UpdateBanner: View {
                         .buttonStyle(.plain)
                         .font(.footnote.weight(.semibold))
                         .padding(.horizontal, 14).padding(.vertical, 7)
-                        .background(Color.brand.opacity(0.9), in: .capsule)
+                        .background(theme.accent.opacity(0.9), in: .capsule)
                         .foregroundStyle(.black.opacity(0.85))
                 }
             }
             if busy, let progress = updater.progress {
-                ProgressView(value: progress).tint(Color.brand)
+                ProgressView(value: progress).tint(theme.accent)
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)

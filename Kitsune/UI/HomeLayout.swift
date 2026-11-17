@@ -43,6 +43,7 @@ extension HomeBlock {
 
 /// Big rows: tap the eye to hide, drag a row onto another to reorder.
 struct HomeLayoutEditor: View {
+    @Environment(\.kitsuneTheme) private var theme
     @AppStorage(HomeBlock.orderKey) private var orderRaw = ""
     @AppStorage(HomeBlock.hiddenKey) private var hiddenRaw = ""
     @State private var targeted: HomeBlock?
@@ -70,7 +71,7 @@ struct HomeLayoutEditor: View {
                 HStack(spacing: 14) {
                     Image(systemName: block.icon)
                         .font(.title3.weight(.medium))
-                        .foregroundStyle(on ? Color.brand : .secondary)
+                        .foregroundStyle(on ? theme.accent : .secondary)
                         .frame(width: 44, height: 44)
                         .background(.white.opacity(0.07), in: .rect(cornerRadius: 12))
                     VStack(alignment: .leading, spacing: 2) {

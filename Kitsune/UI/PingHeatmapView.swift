@@ -4,6 +4,7 @@ import SwiftUI
 
 /// Average ping of one server for every hour of the day, built from the live samples taken while connected.
 struct PingHeatmapView: View {
+    @Environment(\.kitsuneTheme) private var theme
     let server: ServerConfig
     @Environment(\.dismiss) private var dismiss
 
@@ -20,7 +21,7 @@ struct PingHeatmapView: View {
                     ForEach(0..<24, id: \.self) { hour in
                         if let ms = values[hour] {
                             BarMark(x: .value("Час", hour), y: .value("мс", ms))
-                                .foregroundStyle(hour == best?.offset ? Color.green : Color.orange.opacity(0.75))
+                                .foregroundStyle(hour == best?.offset ? Color.green : theme.accent.opacity(0.75))
                                 .cornerRadius(3)
                         }
                     }

@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 
 /// Routing profile, one-tap sets, per-app rules and the user's own site lists, as native-style grouped lists.
 struct RoutingView: View {
+    @Environment(\.kitsuneTheme) private var theme
+    private var accent: Color { theme.accent }
     let library: Library
     @State private var scroll = ScrollPosition(edge: .top)
 
@@ -60,10 +62,10 @@ struct RoutingView: View {
     }
 }
 
-private let accent = Color(red: 1.0, green: 0.50, blue: 0.10)
-
 /// Resolver for tunnelled traffic and ad blocking.
 private struct ProtectionSection: View {
+    @Environment(\.kitsuneTheme) private var theme
+    private var accent: Color { theme.accent }
     @Binding var dns: RoutingSettings.DNSProvider
     @Binding var blockAds: Bool
     @Binding var blockIPv6: Bool
@@ -115,6 +117,8 @@ private struct RussianListsSection: View {
 }
 
 private struct PresetsSection: View {
+    @Environment(\.kitsuneTheme) private var theme
+    private var accent: Color { theme.accent }
     @Binding var presets: Set<RoutePreset>
 
     private func info(_ preset: RoutePreset) -> (LocalizedStringKey, String) {
@@ -148,6 +152,8 @@ import AppKit
 
 /// Process names for one rule list; the picker reads the executable name from the chosen .app.
 private struct AppsSection: View {
+    @Environment(\.kitsuneTheme) private var theme
+    private var accent: Color { theme.accent }
     let title: LocalizedStringKey
     @Binding var apps: [String]
     let footer: LocalizedStringKey?
@@ -192,6 +198,8 @@ private struct AppsSection: View {
 /// Apps pinned to a specific server, e.g. one browser through Netherlands while everything else uses the selected server.
 /// Double hop: traffic goes to the entry server first and leaves through the one chosen on "Серверы".
 private struct DoubleHopSection: View {
+    @Environment(\.kitsuneTheme) private var theme
+    private var accent: Color { theme.accent }
     let library: Library
 
     private var entry: ServerConfig? { library.allServers.first { $0.id == library.routing.entryServerID } }
@@ -231,6 +239,8 @@ private struct DoubleHopSection: View {
 }
 
 private struct AppServersSection: View {
+    @Environment(\.kitsuneTheme) private var theme
+    private var accent: Color { theme.accent }
     let library: Library
 
     private var pinned: [(app: String, server: ServerConfig?)] {
@@ -277,6 +287,8 @@ private struct AppServersSection: View {
 #endif
 
 private struct SitesSection: View {
+    @Environment(\.kitsuneTheme) private var theme
+    private var accent: Color { theme.accent }
     let title: LocalizedStringKey
     let footer: LocalizedStringKey
     @Binding var entries: [String]
@@ -364,6 +376,8 @@ private struct SitesSection: View {
 
 /// "Where will this site go?" Answers from the user's lists and the .ru rule; the core's big Russian lists aren't visible here.
 private struct CheckSiteSection: View {
+    @Environment(\.kitsuneTheme) private var theme
+    private var accent: Color { theme.accent }
     let routing: RoutingSettings
 
     @State private var input = ""

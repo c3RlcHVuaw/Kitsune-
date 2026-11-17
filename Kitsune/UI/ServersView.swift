@@ -1,3 +1,4 @@
+import MapKit
 import Shared
 import SwiftUI
 import TipKit
@@ -11,6 +12,7 @@ extension EnvironmentValues {
 
 /// Subscriptions and manual servers: refresh, traffic, expiry, announcements, ping, selection.
 struct ServersView: View {
+    @Environment(\.kitsuneTheme) private var theme
     let library: Library
     let tunnelUp: Bool
 
@@ -21,6 +23,7 @@ struct ServersView: View {
     @AppStorage("serverSort") var sort = "default"
     @AppStorage("compactServers") var compact = false
     @AppStorage("hideSilent") var hideSilent = false
+    @AppStorage("serversMap") var showMap = false
     @State private var pasteError: String?
     @State private var scroll = ScrollPosition(edge: .top)
     @State private var offset: CGFloat = 0
@@ -93,7 +96,7 @@ struct ServersView: View {
                 VStack(spacing: 12) {
                 ScreenHeader(title: "Серверы", subtitle: pingSubtitle) { toolbarActions }
                 if library.isEmpty {
-                    EmptyState(title: "Пока нет серверов", text: "Скопируйте ссылку на подписку или сервер от провайдера и вставьте её сюда.") {
+                    EmptyState(title: "Пока нет серверов", text: "Скопируйте ссылку на подписку или сервер от провайдера и вставьте её сюда.", symbol: "tray") {
                         VStack(spacing: 10) {
                             Button("Вставить из буфера", systemImage: "doc.on.clipboard") { pasteFromClipboard() }
                                 .buttonStyle(.brand)
@@ -102,6 +105,8 @@ struct ServersView: View {
                             if let pasteError { Text(pasteError).font(.footnote).foregroundStyle(Color.alert).multilineTextAlignment(.center) }
                         }
                     }
+                } else if showMap {
+                    ServersMap(library: library).transition(.opacity)
                 } else {
                     ScrollViewReader { proxy in
                     ScrollView {
@@ -112,6 +117,13 @@ struct ServersView: View {
                                 TipView(ServerActionsTip()).tipBackground(.clear).kGlass(in: .rect(cornerRadius: 20))
                                 if let hint = library.betterHint { betterRow(hint) }
                                 if library.allServers.count > 12, query.isEmpty, !library.recent.isEmpty { recentRow }
+                                if !query.isEmpty, !library.allServers.contains(where: { $0.displayName.localizedCaseInsensitiveContains(query) || $0.summary.localizedCaseInsensitiveContains(query) }) {
+                                    EmptyState(title: "Ничего не нашлось", text: "Попробуйте другое название, страну или адрес.", symbol: "magnifyingglass") {
+                                        Button("Очистить поиск") { withAnimation(.smooth) { query = "" } }.buttonStyle(.brand)
+                                    }
+                                    .frame(height: 280)
+                                    .transition(.opacity)
+                                }
                                 ForEach(Array(library.subscriptions.enumerated()), id: \.element.id) { index, subscription in
                                     SubscriptionCard(library: library, subscription: subscription).appear(index)
                                 }
@@ -138,7 +150,7 @@ struct ServersView: View {
                                     Text(selected.flag ?? "🌐")
                                     Text(selected.displayName).font(.subheadline.weight(.medium)).lineLimit(1)
                                     PingLabel(ping: library.pings[selected.id])
-                                    Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(Color.brand)
+                                    Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(theme.accent)
                                 }
                                 .padding(.horizontal, 14).padding(.vertical, 8)
                                 .kGlass(in: .capsule, interactive: true)
@@ -191,6 +203,10 @@ extension ServersView {
         }
         .disabled(library.isEmpty || pinging)
         .symbolEffect(.pulse, isActive: pinging)
+        Button(showMap ? "Список" : "Карта", systemImage: showMap ? "list.bullet" : "map") {
+            withAnimation(.smooth) { showMap.toggle() }
+        }
+        .disabled(library.isEmpty)
         Menu("Сортировка", systemImage: "arrow.up.arrow.down") {
             Picker("Сортировка", selection: $sort) {
                 Text("Как в подписке").tag("default")
@@ -220,6 +236,7 @@ private struct Surface<Content: View>: View {
 }
 
 private struct SubscriptionCard: View {
+    @Environment(\.kitsuneTheme) private var theme
     let library: Library
     let subscription: Subscription
 
@@ -420,7 +437,7 @@ private struct SubscriptionCard: View {
             }
             .font(.subheadline.monospacedDigit())
             if limited {
-                ProgressView(value: min(fraction, 1)).tint(fraction > 0.9 ? Color.alert : Color(red: 1.0, green: 0.50, blue: 0.10))
+                ProgressView(value: min(fraction, 1)).tint(fraction > 0.9 ? Color.alert : theme.accent)
             }
         }
         .padding(.horizontal, 16)
@@ -450,6 +467,7 @@ private struct ManualCard: View {
 // MARK: - Server rows
 
 private struct ServerRows: View {
+    @Environment(\.kitsuneTheme) private var theme
     let library: Library
     let servers: [ServerConfig]
     var editing: Binding<ServerConfig?>?
@@ -459,6 +477,7 @@ private struct ServerRows: View {
     @State private var heat: ServerConfig?
     @State private var folded: Set<String> = []
     @State private var showSilent = false
+    @State private var deleting: ServerConfig?
     @Environment(SelectedRowVisibility.self) private var selectedRow: SelectedRowVisibility?
 
     /// Servers that failed three checks in a row go to a folded "Не отвечают" group at the bottom (never the selected one).
@@ -528,7 +547,11 @@ private struct ServerRows: View {
             }
         }
         .sensoryFeedback(.selection, trigger: library.selected?.id)
+        .onChange(of: library.selected?.id) { Feedback.sound("Tink", volume: 0.3) }
         .sheet(item: $heat) { PingHeatmapView(server: $0) }
+        .confirmationDialog(String(format: L("Удалить «%@»?"), deleting?.displayName ?? ""), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+            Button("Удалить", role: .destructive) { if let deleting { withAnimation(.smooth) { library.remove(deleting) } } }
+        }
     }
 
     /// Country line: flag, name, how many servers and the best ping among them; tap folds the group.
@@ -542,7 +565,7 @@ private struct ServerRows: View {
                 Text(servers.first?.flag ?? "🌐").font(.title3).frame(width: 32)
                 Text(Locale.current.localizedString(forRegionCode: code) ?? L("Без страны")).font(.subheadline.weight(.semibold)).lineLimit(1)
                 Text("\(servers.count)").font(.footnote.monospacedDigit()).foregroundStyle(.secondary)
-                if hasSelected { Circle().fill(Color.brand).frame(width: 6, height: 6) }
+                if hasSelected { Circle().fill(theme.accent).frame(width: 6, height: 6) }
                 Spacer(minLength: 8)
                 if folded.contains(code), let best { PingLabel(ping: library.pings[best.id]) }
                 Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
@@ -560,6 +583,11 @@ private struct ServerRows: View {
                 ServerRow(server: server, selected: library.selected?.id == server.id, pinned: library.pinned.contains(server.id), dimmed: library.silent.contains(server.id) && library.selected?.id != server.id, ping: library.pings[server.id], history: library.pingHistory[server.id] ?? [], compact: compact) {
                     withAnimation(.smooth(duration: 0.25)) { library.selectedID = server.id }
                 }
+                .rowSwipe(
+                    leading: (library.pinned.contains(server.id) ? "pin.slash.fill" : "pin.fill", theme.accent),
+                    trailing: editing == nil ? nil : ("trash.fill", Color(red: 0.86, green: 0.25, blue: 0.22)),
+                    onLeading: { withAnimation(.smooth) { if library.pinned.contains(server.id) { library.pinned.remove(server.id) } else { library.pinned.insert(server.id) } } },
+                    onTrailing: { deleting = server })
                 .id(server.id)
                 .onScrollVisibilityChange(threshold: 0.3) { visible in
                     if library.selected?.id == server.id { selectedRow?.visible = visible }
@@ -590,6 +618,7 @@ private struct ServerRows: View {
 }
 
 private struct ServerRow: View {
+    @Environment(\.kitsuneTheme) private var theme
     let server: ServerConfig
     let selected: Bool
     var pinned = false
@@ -645,7 +674,7 @@ private struct ServerRow: View {
                 PingLabel(ping: ping)
                 Image(systemName: "checkmark")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color(red: 1.0, green: 0.50, blue: 0.10))
+                    .foregroundStyle(theme.accent)
                     .opacity(selected ? 1 : 0)
                     .scaleEffect(selected ? 1 : 0.6)
             }
@@ -830,6 +859,7 @@ private struct AddSheet: View {
 
 /// What a subscription holds, shown before adding it.
 struct PreviewCard: View {
+    @Environment(\.kitsuneTheme) private var theme
     let url: URL
     let data: Library.Fetched
 
@@ -837,9 +867,9 @@ struct PreviewCard: View {
         let info = data.info
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Image(systemName: "tray.full.fill").foregroundStyle(Color.brand)
+                Image(systemName: "tray.full.fill").foregroundStyle(theme.accent)
                     .frame(width: 32, height: 32)
-                    .background(Color.brand.opacity(0.18), in: .rect(cornerRadius: 10))
+                    .background(theme.accent.opacity(0.18), in: .rect(cornerRadius: 10))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(info.title ?? url.host() ?? L("Подписка")).font(.subheadline.weight(.semibold)).lineLimit(1)
                     Text("\(data.servers.count) \(serversWord(data.servers.count))" + (data.skipped > 0 ? String(format: L(" · пропущено неподдерживаемых: %lld"), data.skipped) : ""))
@@ -909,5 +939,158 @@ private struct EditServerSheet: View {
         }
         .adaptiveSheet()
         .onAppear { text = server.link ?? "" }
+    }
+}
+
+// MARK: - Row swipe
+
+/// Drag a row sideways: right pins, left deletes (when allowed). Past the threshold the action fires on release.
+/// List's own swipeActions need a List; these rows live in a lazy stack, so the gesture is built by hand.
+private struct RowSwipe: ViewModifier {
+    typealias Action = (icon: String, tint: Color)
+    let leading: Action?
+    let trailing: Action?
+    let onLeading: () -> Void
+    let onTrailing: () -> Void
+    @State private var dx: CGFloat = 0
+    private let threshold: CGFloat = 76
+
+    private var armed: Bool { abs(dx) >= threshold }
+
+    func body(content: Content) -> some View {
+        content
+            .offset(x: dx)
+            .background {
+                HStack(spacing: 0) {
+                    reveal(leading, width: max(dx, 0))
+                    Spacer(minLength: 0)
+                    reveal(trailing, width: max(-dx, 0))
+                }
+            }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 18)
+                    .onChanged { value in
+                        let w = value.translation.width
+                        // Mostly vertical drags belong to scrolling.
+                        guard abs(w) > abs(value.translation.height) * 1.6 else { return }
+                        let allowed = w > 0 ? leading != nil : trailing != nil
+                        dx = allowed ? w * 0.8 : w * 0.12
+                    }
+                    .onEnded { _ in
+                        let fired = dx
+                        withAnimation(.spring(duration: 0.35, bounce: 0.25)) { dx = 0 }
+                        if abs(fired) >= threshold { Feedback.sound("Pop", volume: 0.3) }
+                        if fired >= threshold, leading != nil { onLeading() }
+                        else if fired <= -threshold, trailing != nil { onTrailing() }
+                    }
+            )
+            .sensoryFeedback(.impact(weight: .light), trigger: armed) { _, new in new }
+            .onChange(of: armed) { _, new in if new { Feedback.tap() } }
+    }
+
+    @ViewBuilder private func reveal(_ action: Action?, width: CGFloat) -> some View {
+        if let action, width > 0 {
+            ZStack {
+                action.tint.opacity(0.28)
+                Image(systemName: action.icon)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(action.tint)
+                    .scaleEffect(width >= threshold ? 1.15 : 0.85)
+                    .opacity(min(1, Double(width) / 40))
+            }
+            .frame(width: width)
+        }
+    }
+}
+
+private extension View {
+    func rowSwipe(leading: (icon: String, tint: Color)?, trailing: (icon: String, tint: Color)?, onLeading: @escaping () -> Void, onTrailing: @escaping () -> Void) -> some View {
+        modifier(RowSwipe(leading: leading, trailing: trailing, onLeading: onLeading, onTrailing: onTrailing))
+    }
+}
+
+// MARK: - Map
+
+/// Servers on a world map: a pin per country, coloured by its best ping; a tap lists that country's servers below.
+private struct ServersMap: View {
+    @Environment(\.kitsuneTheme) private var theme
+    let library: Library
+    @State private var focus: String?
+    @State private var camera = MapCameraPosition.automatic
+
+    private struct Pin: Identifiable {
+        let code: String
+        let coordinate: CLLocationCoordinate2D
+        let servers: [ServerConfig]
+        var id: String { code }
+    }
+
+    private var pins: [Pin] {
+        Dictionary(grouping: library.allServers, by: { $0.countryCode?.uppercased() ?? "" })
+            .compactMap { code, servers in CountryGeo.coordinate(code).map { Pin(code: code, coordinate: $0, servers: servers) } }
+            .sorted { $0.code < $1.code }
+    }
+
+    private func best(_ pin: Pin) -> Ping? {
+        pin.servers.compactMap { library.pings[$0.id] }.min { ($0.milliseconds ?? .max) < ($1.milliseconds ?? .max) }
+    }
+
+    private var unplaced: Int { library.allServers.count - pins.reduce(0) { $0 + $1.servers.count } }
+
+    var body: some View {
+        let pins = pins
+        VStack(spacing: 10) {
+            Map(position: $camera) {
+                ForEach(pins) { pin in
+                    Annotation(Locale.current.localizedString(forRegionCode: pin.code) ?? pin.code, coordinate: pin.coordinate, anchor: .center) {
+                        let isSelected = pin.servers.contains { $0.id == library.selected?.id }
+                        Button {
+                            withAnimation(.smooth) {
+                                focus = focus == pin.code ? nil : pin.code
+                                camera = focus == nil ? .automatic : .region(MKCoordinateRegion(center: pin.coordinate, span: MKCoordinateSpan(latitudeDelta: 28, longitudeDelta: 28)))
+                            }
+                        } label: {
+                            Text("\(pin.servers.count)")
+                                .font(.caption2.weight(.bold).monospacedDigit())
+                                .foregroundStyle(.black.opacity(0.8))
+                                .frame(minWidth: 22, minHeight: 22)
+                                .background(PingLabel.color(for: best(pin)), in: .circle)
+                                .overlay(Circle().stroke(isSelected ? theme.accent : .white.opacity(0.7), lineWidth: isSelected ? 3 : 1.5))
+                                .scaleEffect(focus == pin.code ? 1.3 : 1)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Locale.current.localizedString(forRegionCode: pin.code) ?? pin.code)
+                    }
+                }
+            }
+            .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
+            .mapControlVisibility(.hidden)
+            .colorScheme(.dark)
+            .clipShape(.rect(cornerRadius: 24))
+            .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.1), lineWidth: 0.6))
+            .padding(.horizontal, 16)
+
+            if let focus, let pin = pins.first(where: { $0.code == focus }) {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(pin.servers) { server in
+                            ServerRow(server: server, selected: library.selected?.id == server.id, pinned: library.pinned.contains(server.id), ping: library.pings[server.id], history: library.pingHistory[server.id] ?? [], compact: true) {
+                                withAnimation(.smooth(duration: 0.25)) { library.selectedID = server.id }
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 170)
+                .kGlass(in: .rect(cornerRadius: 22))
+                .padding(.horizontal, 16)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                Text(unplaced > 0 ? String(format: L("Нажмите на метку страны. Серверов без страны: %lld"), unplaced) : L("Нажмите на метку страны, чтобы увидеть её серверы"))
+                    .font(.footnote).foregroundStyle(.secondary)
+                    .frame(minHeight: 28)
+            }
+        }
+        .padding(.bottom, 16)
+        .sensoryFeedback(.selection, trigger: focus)
     }
 }

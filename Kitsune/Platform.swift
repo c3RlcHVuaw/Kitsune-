@@ -93,3 +93,24 @@ extension View {
         #endif
     }
 }
+
+/// Quiet system sounds and trackpad haptics, each behind its own setting. No-ops on iOS (it has `sensoryFeedback`).
+@MainActor enum Feedback {
+    static func sound(_ name: String, volume: Float = 0.5) {
+        #if os(macOS)
+        guard UserDefaults.standard.object(forKey: "sounds") as? Bool ?? true else { return }
+        // A copy, so a quick second call plays over the first instead of being swallowed.
+        guard let sound = NSSound(named: name)?.copy() as? NSSound else { return }
+        sound.volume = volume
+        sound.play()
+        #endif
+    }
+
+    /// Felt only while a finger rests on the trackpad.
+    static func tap(firm: Bool = false) {
+        #if os(macOS)
+        guard UserDefaults.standard.object(forKey: "haptics") as? Bool ?? true else { return }
+        NSHapticFeedbackManager.defaultPerformer.perform(firm ? .levelChange : .alignment, performanceTime: .now)
+        #endif
+    }
+}

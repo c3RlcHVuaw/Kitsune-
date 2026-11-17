@@ -29,7 +29,8 @@ struct KitsuneApp: App {
     private var root: some View {
         RootView(vpn: vpn, library: library, tab: $tab)
             .overlay(alignment: .bottom) { ToastOverlay() }
-            .tint(.white)
+            .tint(theme.accent)
+            .environment(\.kitsuneTheme, theme)
             .modifier(WhatsNewModifier())
             // vless:// and similar links open Kitsune and add the server.
             .onChange(of: vpn.status) { old, new in

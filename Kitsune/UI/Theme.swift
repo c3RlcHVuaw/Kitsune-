@@ -32,6 +32,16 @@ extension Color {
     static let alert = Color(red: 1.0, green: 0.92, blue: 0.55)
 }
 
+private struct ThemeKey: EnvironmentKey { static let defaultValue = ButtonTheme.copper }
+
+extension EnvironmentValues {
+    /// The chosen colour theme: set once at the root so every screen takes its accent from it.
+    var kitsuneTheme: ButtonTheme {
+        get { self[ThemeKey.self] }
+        set { self[ThemeKey.self] = newValue }
+    }
+}
+
 /// Solid white capsule with orange text: the one primary action per screen.
 struct BrandButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
@@ -391,21 +401,41 @@ struct GlassGroup<Content: View>: View {
     }
 }
 
-/// Empty screen: the fox, one line on what will be here, one main action.
+/// Empty screen: the fox, one line on what will be here, one main action. An optional symbol says what is missing.
 struct EmptyState<Actions: View>: View {
+    @Environment(\.kitsuneTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: LocalizedStringKey
     let text: LocalizedStringKey
+    var symbol: String?
     @ViewBuilder var actions: Actions
+    @State private var float = false
 
     var body: some View {
         VStack(spacing: 12) {
-            FoxMark(color: .brand.opacity(0.8)).frame(width: 60)
+            FoxMark(color: theme.soft.opacity(0.8)).frame(width: 60)
+                .overlay(alignment: .topTrailing) {
+                    if let symbol {
+                        Image(systemName: symbol)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(theme.accent)
+                            .frame(width: 28, height: 28)
+                            .kGlass(in: .circle)
+                            .offset(x: 18, y: -10)
+                    }
+                }
+                .offset(y: float ? -3 : 3)
+                .padding(.top, 6)
             Text(title).font(.display(18, relativeTo: .title3)).padding(.top, 6)
             Text(text).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 300)
             actions.padding(.top, 8)
         }
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true)) { float = true }
+        }
     }
 }
 
@@ -443,6 +473,7 @@ struct ToastOverlay: View {
 
 /// A small "?" next to a setting that needs a sentence of explanation; the popover can show the route as icons.
 struct HelpButton: View {
+    @Environment(\.kitsuneTheme) private var theme
     let text: LocalizedStringKey
     var route: [String] = []
     @State private var shown = false
@@ -459,7 +490,7 @@ struct HelpButton: View {
                     HStack(spacing: 8) {
                         ForEach(Array(route.enumerated()), id: \.offset) { index, symbol in
                             if index > 0 { Image(systemName: "arrow.right").font(.caption2.weight(.bold)).foregroundStyle(.tertiary) }
-                            Image(systemName: symbol).font(.title3).foregroundStyle(Color.brand)
+                            Image(systemName: symbol).font(.title3).foregroundStyle(theme.accent)
                         }
                     }
                 }
