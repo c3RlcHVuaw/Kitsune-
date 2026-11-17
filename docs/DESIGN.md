@@ -11,7 +11,7 @@ check `whoami`: a second Figma connector may be signed in to a different account
 | Cover | File cover 1920×1080 |
 | Foundations | All colour tokens with values, type ramp, glass/effects, spacing and radius |
 | Components | Four columns: Основа, Навигация, Главная, Списки и настройки. Every component has a description |
-| Screens | Sections: Первый запуск, Главная, Разделы, Дополнительно, Шторки и окна. Each screen has a caption |
+| Screens | Sections: Первый запуск, Главная, Разделы, Дополнительно, Шторки и окна, Настройки · новый дизайн (concept: Обзор, Вид, Защита, Ещё; not in code yet). Each screen has a caption |
 
 Screens are macOS windows **490 × 836**, corner radius 26, built as vertical auto layout:
 `TitleBar` instance → `Content` (padding 16, Home uses 20). Scrolling pages put everything below `PageHeader`
