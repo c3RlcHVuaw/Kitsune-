@@ -44,7 +44,7 @@
   </tr>
   <tr>
     <td align="center"><img src="docs/settings.webp" width="380" alt="Настройки"><br><sub>Настройки и статистика</sub></td>
-    <td></td>
+    <td align="center"><img src="docs/servers-map.webp" width="380" alt="Карта серверов"><br><sub>Серверы на карте</sub></td>
   </tr>
 </table>
 
