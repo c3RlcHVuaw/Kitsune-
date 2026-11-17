@@ -13,7 +13,7 @@
 ![SwiftUI](https://img.shields.io/badge/SwiftUI-Liquid_Glass-F28C28?style=flat-square)
 ![sing-box](https://img.shields.io/badge/core-sing--box-2b2b2f?style=flat-square)
 
-<img src="docs/home.webp" width="380" alt="Главный экран">
+<img src="docs/home.webp" width="300" alt="Главный экран"> <img src="docs/home-connected.webp" width="300" alt="Подключено">
 
 </div>
 
