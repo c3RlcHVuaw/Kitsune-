@@ -134,8 +134,40 @@ final class Library {
 
     // MARK: Subscriptions
 
-    func addSubscription(_ url: URL) async throws {
+    /// What a subscription URL returns right now, without adding it: for the preview and for refreshes.
+    struct Fetched {
+        let servers: [ServerConfig]
+        let skipped: Int
+        let info: SubscriptionInfo
+        var countries: [String] { Array(NSOrderedSet(array: servers.compactMap(\.flag)).array as? [String] ?? []) }
+    }
+
+    static func fetch(_ url: URL) async throws -> Fetched {
+        var request = URLRequest(url: url, timeoutInterval: 20)
+        request.setValue("Kitsune/\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0")", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw SubscriptionError(message: "Нет ответа от сервера") }
+        guard (200..<300).contains(http.statusCode) else { throw SubscriptionError(message: String(format: L("Сервер ответил %lld"), http.statusCode)) }
+        let (servers, skipped) = SubscriptionParser.servers(from: data)
+        guard !servers.isEmpty else { throw SubscriptionError(message: "В подписке нет поддерживаемых серверов") }
+        let headers = Dictionary(http.allHeaderFields.compactMap { key, value in (key as? String).map { ($0, "\(value)") } }, uniquingKeysWith: { _, last in last })
+        return Fetched(servers: servers, skipped: skipped, info: SubscriptionInfo.parse(headers: headers))
+    }
+
+    /// Adds a subscription; with `prefetched` (the preview already loaded it) there is no second download.
+    func addSubscription(_ url: URL, prefetched: Fetched? = nil) async throws {
         guard !subscriptions.contains(where: { $0.url == url }) else { return }
+        if let prefetched {
+            var subscription = Subscription(url: url)
+            subscription.servers = prefetched.servers
+            subscription.skipped = prefetched.skipped
+            subscription.info = prefetched.info
+            subscription.updatedAt = .now
+            subscriptions.append(subscription)
+            if selected == nil || selectedID == nil { selectedID = prefetched.servers.first?.id }
+            save()
+            return
+        }
         let subscription = Subscription(url: url)
         subscriptions.append(subscription)
         save()
@@ -152,18 +184,11 @@ final class Library {
         updating.insert(id)
         defer { updating.remove(id) }
         do {
-            var request = URLRequest(url: url, timeoutInterval: 20)
-            request.setValue("Kitsune/\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0")", forHTTPHeaderField: "User-Agent")
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else { throw SubscriptionError(message: "Нет ответа от сервера") }
-            guard (200..<300).contains(http.statusCode) else { throw SubscriptionError(message: String(format: L("Сервер ответил %lld"), http.statusCode)) }
-            let (servers, skipped) = SubscriptionParser.servers(from: data)
-            guard !servers.isEmpty else { throw SubscriptionError(message: "В подписке нет поддерживаемых серверов") }
-            let headers = Dictionary(http.allHeaderFields.compactMap { key, value in (key as? String).map { ($0, "\(value)") } }, uniquingKeysWith: { _, last in last })
+            let fetched = try await Self.fetch(url)
             update(id) {
-                $0.servers = servers
-                $0.skipped = skipped
-                $0.info = SubscriptionInfo.parse(headers: headers)
+                $0.servers = fetched.servers
+                $0.skipped = fetched.skipped
+                $0.info = fetched.info
                 $0.updatedAt = .now
                 $0.lastError = nil
             }
@@ -194,6 +219,27 @@ final class Library {
         content.body = subscription.name
         try? await center.add(UNNotificationRequest(identifier: key, content: content, trigger: nil))
         UserDefaults.standard.set(today + 1, forKey: key)
+    }
+
+    /// Connects to the selected server. If the server itself did not answer and it came from a subscription, the
+    /// provider may have changed its keys: the subscription is refreshed and, when the server's config changed, tried once more.
+    func connect(_ vpn: VPNManager) async {
+        guard let server = selected else { return }
+        await vpn.connect(server, servers: allServers, routing: routing)
+        guard vpn.serverFailed, !vpn.status.isActive,
+              let owner = subscriptions.first(where: { $0.servers.contains { $0.id == server.id } }) else { return }
+        let firstError = vpn.lastError
+        vpn.beginSubscriptionRefresh()
+        await refresh(owner.id)
+        guard let fresh = subscriptions.first(where: { $0.id == owner.id }),
+              !fresh.servers.contains(where: { $0.id == server.id }), // unchanged config would fail the same way
+              let replacement = fresh.servers.first(where: { $0.name == server.name }) else {
+            vpn.endSubscriptionRefresh(error: firstError)
+            return
+        }
+        selectedID = replacement.id
+        vpn.endSubscriptionRefresh(error: nil)
+        await vpn.connect(replacement, servers: allServers, routing: routing)
     }
 
     func refreshDue() async {

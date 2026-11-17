@@ -26,9 +26,9 @@ struct RoutingView: View {
                             AppServersSection(library: library)
                             #endif
                             SitesSection(title: "Сайты — всегда напрямую", footer: "Эти сайты и адреса всегда открываются без VPN.",
-                                         entries: binding(\.direct))
+                                         entries: binding(\.direct), examples: ["apple.com", "icloud.com", "microsoft.com"])
                             SitesSection(title: "Сайты — всегда через VPN", footer: "Идут через VPN, даже если сайт российский.",
-                                         entries: binding(\.proxy))
+                                         entries: binding(\.proxy), examples: ["chatgpt.com", "youtube.com", "instagram.com"])
                         }
                         CheckSiteSection(routing: library.routing)
                     }
@@ -82,6 +82,7 @@ private struct ProtectionSection: View {
             }
             ListRow {
                 Text("Блокировать IPv6")
+                HelpButton(text: "Не у всех серверов есть IPv6. Тогда такие запросы могут уйти мимо туннеля, и сайт увидит ваш настоящий адрес. Блокировка закрывает эту дыру; на скорость не влияет.")
                 Spacer()
                 Toggle("", isOn: $blockIPv6).labelsHidden().toggleStyle(.switch).tint(accent)
             }
@@ -148,6 +149,8 @@ private struct AppsSection: View {
     @Binding var apps: [String]
     let footer: LocalizedStringKey?
 
+    @State private var justAdded: String?
+
     var body: some View {
         ListSection(title: title, footer: footer) {
             ForEach(apps, id: \.self) { name in
@@ -159,6 +162,8 @@ private struct AppsSection: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
                 }
+                .background(accent.opacity(justAdded == name ? 0.22 : 0))
+                .animation(.smooth(duration: 0.6), value: justAdded)
             }
             ListRow {
                 Button("Добавить приложение…", systemImage: "plus", action: pick)
@@ -176,6 +181,8 @@ private struct AppsSection: View {
         guard panel.runModal() == .OK, let url = panel.url, let bundle = Bundle(url: url),
               let name = bundle.object(forInfoDictionaryKey: "CFBundleExecutable") as? String else { return }
         withAnimation(.smooth) { if !apps.contains(name) { apps.append(name) } }
+        justAdded = name
+        Task { try? await Task.sleep(for: .seconds(1.4)); if justAdded == name { justAdded = nil } }
     }
 }
 
@@ -190,6 +197,7 @@ private struct DoubleHopSection: View {
         ListSection(title: "Двойной прыжок", footer: "Трафик идёт через два сервера: входной не видит, куда вы заходите, а выходной не знает, кто вы. Скорость ниже, чем с одним сервером. Применяется при следующем подключении.") {
             ListRow {
                 Text("Через входной сервер")
+                HelpButton(text: "Сначала трафик идёт на входной сервер, оттуда на выходной и только потом на сайт. Входной знает, кто вы, но не видит, куда вы заходите. Выходной видит сайты, но не знает, кто вы.", route: ["laptopcomputer", "server.rack", "server.rack", "globe"])
                 Spacer()
                 Toggle("", isOn: Binding(
                     get: { library.routing.entryServerID != nil },
@@ -270,8 +278,11 @@ private struct SitesSection: View {
     let footer: LocalizedStringKey
     @Binding var entries: [String]
 
+    /// One-tap suggestions shown while the list is empty.
+    var examples: [String] = []
     @State private var draft = ""
     @State private var error: String?
+    @State private var justAdded: String?
 
     var body: some View {
         ListSection(title: title, footer: footer) {
@@ -284,6 +295,8 @@ private struct SitesSection: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
                 }
+                .background(accent.opacity(justAdded == entry ? 0.22 : 0))
+                .animation(.smooth(duration: 0.6), value: justAdded)
                 .contextMenu {
                     Button("Копировать", systemImage: "doc.on.doc") { Clipboard.copy(entry) }
                     Button("Изменить", systemImage: "pencil") { draft = entry; entries.removeAll { $0 == entry } }
@@ -306,13 +319,35 @@ private struct SitesSection: View {
             if let error {
                 ListRow { Label(error, systemImage: "exclamationmark.triangle.fill").font(.footnote).foregroundStyle(Color.alert) }
             }
+            if entries.isEmpty, !examples.isEmpty {
+                ListRow {
+                    Text("Например:").font(.footnote).foregroundStyle(.secondary)
+                    ForEach(examples, id: \.self) { example in
+                        Button {
+                            withAnimation(.smooth) { entries.append(example) }
+                            flash(example)
+                        } label: {
+                            Label(example, systemImage: "plus").font(.footnote.weight(.medium))
+                                .padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(.white.opacity(0.08), in: .capsule)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
+    }
+
+    /// The new row glows copper for a moment, so you see where it landed.
+    private func flash(_ entry: String) {
+        justAdded = entry
+        Task { try? await Task.sleep(for: .seconds(1.4)); if justAdded == entry { justAdded = nil } }
     }
 
     private func add() {
         do {
             let entry = try RouteEntry(draft).display
-            if !entries.contains(entry) { withAnimation(.smooth) { entries.append(entry) } }
+            if !entries.contains(entry) { withAnimation(.smooth) { entries.append(entry) }; flash(entry) }
             draft = ""
         } catch {
             self.error = switch error {

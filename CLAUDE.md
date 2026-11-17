@@ -39,7 +39,7 @@ pkill -x Kitsune; ditto .build/dd-mac-release/Build/Products/Release/Kitsune.app
 - Swift 6, strict concurrency, **warnings are errors**. Deprecated APIs fail the build.
 - Every new user-visible string: Russian literal in code + English line in `Kitsune/en.lproj/Localizable.strings`.
   No duplicate keys: `plutil -lint Kitsune/en.lproj/Localizable.strings` and
-  `grep -oE '^"([^"\\]|\\.)*" =' Kitsune/en.lproj/Localizable.strings | sort | uniq -d` must print nothing.
+  `LC_ALL=C grep -oE '^"([^"\\]|\\.)*" =' Kitsune/en.lproj/Localizable.strings | LC_ALL=C sort | uniq -d` must print nothing.
 - `ConfigBuilder` changes keep defaults backward compatible (golden test in `Shared/Tests/SharedTests/Golden`), and new
   `RoutingSettings` fields decode with defaults so old saved settings still load.
 - Keep `windows/Kitsune.Core` in step with `Shared` when link parsing, `ConfigBuilder` or `RoutingSettings` change.

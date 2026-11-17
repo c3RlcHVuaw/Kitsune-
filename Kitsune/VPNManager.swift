@@ -29,18 +29,24 @@ final class VPNManager {
     private(set) var connectedDate: Date?
     /// macOS: what the connection is doing right now, shown on the button while connecting.
     enum ConnectStep: Int, CaseIterable {
-        case prepare, core, handshake
+        case prepare, core, handshake, refresh
         var title: String {
             switch self {
             case .prepare: L("Готовим настройки")
             case .core: L("Запускаем ядро")
             case .handshake: L("Проверяем связь")
+            case .refresh: L("Обновляем подписку")
             }
         }
         /// How far the ring is closed at this step.
-        var progress: Double { [0.25, 0.55, 0.85][rawValue] }
+        var progress: Double { [0.25, 0.55, 0.85, 0.4][rawValue] }
     }
     private(set) var connectStep: ConnectStep?
+
+    /// The server did not answer and its subscription is being refreshed before a second try: the button keeps
+    /// spinning with "Обновляем подписку…" instead of showing the first error.
+    func beginSubscriptionRefresh() { lastError = nil; status = .connecting; connectStep = .refresh }
+    func endSubscriptionRefresh(error: String?) { connectStep = nil; status = .disconnected; lastError = error }
     /// Live speed (bytes/s) and session totals (bytes), from the core's /traffic stream.
     private(set) var downRate: Int64 = 0
     private(set) var upRate: Int64 = 0
@@ -86,6 +92,7 @@ final class VPNManager {
     /// Builds the sing-box config for this server and routing, then starts the tunnel.
     func connect(_ server: ServerConfig, servers: [ServerConfig], routing: RoutingSettings) async {
         lastError = nil
+        serverFailed = false
         #if os(macOS)
         reconnectAttempts = 0
         await connectDirect(server, servers: servers, routing: routing)
@@ -141,6 +148,8 @@ final class VPNManager {
     }
 
     func clearError() { lastError = nil }
+    /// The core started but the server never answered (not a cancelled password or a missing file): worth refreshing the subscription.
+    private(set) var serverFailed = false
 
     /// Connect with the selected server, or disconnect if already active.
     func toggle(library: Library) async {
@@ -551,6 +560,7 @@ extension VPNManager {
             try? await Task.sleep(for: .milliseconds(500))
         }
         lastError = Self.coreError(log) ?? L("Ядро не запустилось.")
+        serverFailed = true
         disconnect()
         status = .disconnected
     }

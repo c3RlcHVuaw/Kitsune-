@@ -24,6 +24,18 @@ import Foundation
 
     static var totalHours: Int { Int(sessions.reduce(0) { $0 + $1.duration } / 3600) }
 
+    /// 0 Лисёнок … 4 Ёкай, the same steps as `rank`.
+    static var rankLevel: Int {
+        if totalHours >= 100 { return 4 }
+        let s = streak
+        if s >= 30 { return 3 }
+        if s >= 7 { return 2 }
+        return sessions.count >= 5 ? 1 : 0
+    }
+    /// The highest rank ever reached: a broken streak never takes an opened theme away.
+    static var bestRankLevel: Int { max(rankLevel, UserDefaults.standard.integer(forKey: "bestRank")) }
+    static let rankTitles = [L("Лисёнок"), L("Любопытная лиса"), L("Тихая лиса"), L("Лис-хранитель"), L("Ёкай")]
+
     static func end(down: Int64, up: Int64) {
         guard let current else { return }
         self.current = nil
@@ -32,6 +44,7 @@ import Foundation
         guard Date.now.timeIntervalSince(current.start) >= 5 else { return } // failed attempts aren't history
         sessions = Array((sessions + [Session(server: current.server, country: current.country, start: current.start, end: .now, down: down, up: up)]).suffix(200))
         UserDefaults.standard.set(try? JSONEncoder().encode(sessions), forKey: key)
+        UserDefaults.standard.set(bestRankLevel, forKey: "bestRank")
     }
 
     /// Consecutive days with at least one connection, counting back from today (or yesterday, if today has none yet).

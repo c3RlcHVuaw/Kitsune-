@@ -14,6 +14,13 @@ struct OnboardingView: View {
     @State private var permissionGranted = false
     @State private var askingPermission = false
     @State private var adding = false
+    /// A pasted subscription is opened right away, so the first screen already shows what is inside.
+    @State private var preview: (url: URL, data: Library.Fetched)?
+    private var subscriptionURL: URL? {
+        let trimmed = link.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed), ["http", "https"].contains(url.scheme?.lowercased()) else { return nil }
+        return url
+    }
 
     var body: some View {
         ZStack {
@@ -123,6 +130,15 @@ struct OnboardingView: View {
             #endif
             LinkField(link: $link, error: linkError)
                 .onChange(of: link) { linkError = nil }
+            if let preview { PreviewCard(url: preview.url, data: preview.data).transition(.blurReplace) }
+        }
+        .animation(.smooth, value: preview?.url)
+        .task(id: link) {
+            preview = nil
+            guard let url = subscriptionURL else { return }
+            try? await Task.sleep(for: .milliseconds(500)) // typing pauses before the request goes out
+            guard !Task.isCancelled, let data = try? await Library.fetch(url) else { return }
+            preview = (url, data)
         }
     }
 
@@ -146,7 +162,11 @@ struct OnboardingView: View {
         Task {
             defer { adding = false }
             do {
-                try await library.add(any: link)
+                if let preview, preview.url == subscriptionURL {
+                    try await library.addSubscription(preview.url, prefetched: preview.data)
+                } else {
+                    try await library.add(any: link)
+                }
                 onFinish()
             } catch {
                 linkError = error.localizedDescription

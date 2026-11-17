@@ -36,7 +36,7 @@ struct DiagnosticsView: View {
                 .onChange(of: log) { proxy.scrollTo("end") }
             }
             Button(copied ? L("Скопировано") : L("Копировать журнал"), systemImage: copied ? "checkmark" : "doc.on.doc") {
-                Clipboard.copy(log)
+                Clipboard.copy(log, toast: nil)
                 copied = true
                 Task { try? await Task.sleep(for: .seconds(2)); copied = false }
             }

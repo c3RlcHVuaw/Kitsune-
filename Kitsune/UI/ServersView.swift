@@ -179,6 +179,7 @@ private struct SubscriptionCard: View {
 
     @Environment(\.openURL) private var openURL
     @State private var announceExpanded = false
+    @State private var confirmDelete = false
     private var updating: Bool { library.updating.contains(subscription.id) }
     private var announce: String? { subscription.info.announce.flatMap { $0.isEmpty ? nil : $0 } }
     private var links: [URL] { subscription.info.links }
@@ -230,7 +231,26 @@ private struct SubscriptionCard: View {
                     }
                     if !subscription.collapsed {
                         if hasInfoRows { divider }
-                        ServerRows(library: library, servers: subscription.servers)
+                        if subscription.servers.isEmpty && updating {
+                            // First download: placeholder rows instead of an empty card.
+                            VStack(spacing: 0) {
+                                ForEach(0..<4, id: \.self) { _ in
+                                    HStack(spacing: 12) {
+                                        RoundedRectangle(cornerRadius: 4).frame(width: 24, height: 18)
+                                        VStack(alignment: .leading, spacing: 5) {
+                                            RoundedRectangle(cornerRadius: 3).frame(width: 150, height: 10)
+                                            RoundedRectangle(cornerRadius: 3).frame(width: 90, height: 8)
+                                        }
+                                        Spacer()
+                                    }
+                                    .foregroundStyle(.white.opacity(0.08))
+                                    .padding(.horizontal, 20).frame(height: 48)
+                                }
+                            }
+                            .shimmer()
+                        } else {
+                            ServerRows(library: library, servers: subscription.servers)
+                        }
                     }
                 }
             }
@@ -307,7 +327,7 @@ private struct SubscriptionCard: View {
                     if let support = subscription.info.supportURL {
                         Button("Поддержка", systemImage: "questionmark.bubble") { openURL(support) }
                     }
-                    Button("Удалить подписку", systemImage: "trash", role: .destructive) { library.remove(subscription) }
+                    Button("Удалить подписку", systemImage: "trash", role: .destructive) { confirmDelete = true }
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -320,6 +340,12 @@ private struct SubscriptionCard: View {
             .menuIndicator(.hidden)
             .foregroundStyle(.secondary)
             .accessibilityLabel("Действия с подпиской")
+        }
+        .confirmationDialog(String(format: L("Удалить «%@»?"), subscription.name), isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Удалить", role: .destructive) { withAnimation(.smooth) { library.remove(subscription) }; Toaster.shared.show(L("Подписка удалена")) }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text(String(format: L("%lld %@ пропадут из списка. Подписку можно добавить снова по ссылке."), subscription.servers.count, serversWord(subscription.servers.count)))
         }
     }
 
@@ -686,6 +712,14 @@ private struct AddSheet: View {
     @State private var text = ""
     @State private var error: String?
     @State private var busy = false
+    /// A subscription is shown before it is added: what is inside, how much is left, until when.
+    @State private var preview: (url: URL, data: Library.Fetched)?
+
+    private var subscriptionURL: URL? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed), ["http", "https"].contains(url.scheme?.lowercased()) else { return nil }
+        return url
+    }
 
     var body: some View {
         NavigationStack {
@@ -695,8 +729,10 @@ private struct AddSheet: View {
                         .font(.footnote)
                         .opacity(0.8)
                     LinkField(link: $text, error: error)
-                        .onChange(of: text) { error = nil }
+                        .onChange(of: text) { error = nil; preview = nil }
+                    if let preview { PreviewCard(url: preview.url, data: preview.data).transition(.blurReplace) }
                 }
+                .animation(.smooth, value: preview?.url)
                 .padding(20)
             }
             .navigationTitle("Добавить")
@@ -709,7 +745,7 @@ private struct AddSheet: View {
                     if busy {
                         ProgressView()
                     } else {
-                        Button("Добавить", systemImage: "checkmark") { save() }
+                        Button(subscriptionURL != nil && preview == nil ? L("Проверить") : L("Добавить"), systemImage: "checkmark") { save() }
                             .disabled(text.isEmpty)
                     }
                 }
@@ -724,13 +760,67 @@ private struct AddSheet: View {
         Task {
             defer { busy = false }
             do {
-                try await library.add(any: text)
+                if let url = subscriptionURL {
+                    guard let preview, preview.url == url else {
+                        preview = (url, try await Library.fetch(url)) // first press: look inside
+                        return
+                    }
+                    try await library.addSubscription(url, prefetched: preview.data)
+                } else {
+                    try await library.add(any: text)
+                }
                 dismiss()
             } catch {
                 self.error = error.localizedDescription
             }
         }
     }
+}
+
+/// What a subscription holds, shown before adding it.
+struct PreviewCard: View {
+    let url: URL
+    let data: Library.Fetched
+
+    var body: some View {
+        let info = data.info
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "tray.full.fill").foregroundStyle(Color.brand)
+                    .frame(width: 32, height: 32)
+                    .background(Color.brand.opacity(0.18), in: .rect(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(info.title ?? url.host() ?? L("Подписка")).font(.subheadline.weight(.semibold)).lineLimit(1)
+                    Text("\(data.servers.count) \(serversWord(data.servers.count))" + (data.skipped > 0 ? String(format: L(" · пропущено неподдерживаемых: %lld"), data.skipped) : ""))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if !data.countries.isEmpty {
+                Text(data.countries.prefix(16).joined(separator: " ") + (data.countries.count > 16 ? " +\(data.countries.count - 16)" : ""))
+                    .font(.title3)
+            }
+            if info.used != nil || info.expire != nil {
+                HStack {
+                    if let used = info.used {
+                        Text((info.total ?? 0) > 0
+                             ? String(format: L("%@ из %@"), bytes(used), bytes(info.total ?? 0))
+                             : String(format: L("%@ · безлимит"), bytes(used)))
+                    }
+                    Spacer()
+                    if let expire = info.expire {
+                        Text(expire < .now ? L("Истекла") : String(format: L("до %@"), expire.formatted(.dateTime.day().month(.abbreviated).year())))
+                            .foregroundStyle(expire < .now ? Color.alert : .secondary)
+                    }
+                }
+                .font(.footnote.monospacedDigit())
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .kGlass(in: .rect(cornerRadius: 20))
+    }
+
+    private func bytes(_ value: Int64) -> String { ByteCountFormatter.string(fromByteCount: value, countStyle: .binary) }
 }
 
 private struct EditServerSheet: View {

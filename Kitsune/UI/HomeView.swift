@@ -149,13 +149,7 @@ struct HomeView: View {
                 }
                 Group {
                     if let error = vpn.lastError, hasError {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(Color.alert)
-                            .multilineTextAlignment(.leading)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .kGlass(in: .rect(cornerRadius: 18))
+                        errorCard(error)
                     } else if vpn.status == .connected, !minimal, let server {
                         VStack(spacing: 12) {
                             ForEach(Array(HomeBlock.order(homeOrder).enumerated()), id: \.element) { index, block in
@@ -260,6 +254,42 @@ struct HomeView: View {
         return String(format: L("Последняя сессия: %@ · %@ · %@"), when, length, ByteCountFormatter.string(fromByteCount: bytes, countStyle: .binary))
     }
 
+    /// What went wrong, in words, with the three ways out right under it.
+    private func errorCard(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(.footnote)
+                .foregroundStyle(Color.alert)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 8) {
+                if let current = server, let other = library.alternative(to: current) {
+                    errorAction("Другой сервер", "arrow.triangle.swap") {
+                        library.selectedID = other.id
+                        vpn.clearError()
+                        Task { await library.connect(vpn) }
+                    }
+                }
+                errorAction("Повторить", "arrow.clockwise") { vpn.clearError(); Task { await library.connect(vpn) } }
+                #if os(macOS)
+                errorAction("Диагностика", "stethoscope") { showDiagnostics = true }
+                #endif
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .kGlass(in: .rect(cornerRadius: 18))
+    }
+
+    private func errorAction(_ title: LocalizedStringKey, _ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon).font(.footnote.weight(.medium))
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(.white.opacity(0.1), in: .capsule)
+        }
+        .buttonStyle(.plain)
+    }
+
     /// Moves the live tunnel to another server without reconnecting.
     private func switchFromSlow() {
         guard let current = server, let other = library.alternative(to: current) else { return }
@@ -281,8 +311,8 @@ struct HomeView: View {
         #endif
         if vpn.status.isActive {
             vpn.disconnect()
-        } else if let server {
-            Task { await vpn.connect(server, servers: library.allServers, routing: library.routing) }
+        } else if server != nil {
+            Task { await library.connect(vpn) }
         } else {
             tab = .servers
         }
@@ -338,16 +368,14 @@ private struct ConnectButton: View {
                             view.scaleEffect(grown ? 1.35 : 1).opacity(grown ? 0 : 1)
                         } animation: { _ in .easeOut(duration: 2.2) }
                 }
-                Circle()
-                    .trim(from: 0, to: ringProgress)
-                    .stroke(ring, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                ThemeStroke(theme: theme, color: ring == theme.accent ? nil : ring, trim: ringProgress)
                     .animation(.smooth(duration: 0.6), value: step)
                     .rotationEffect(.degrees(spin ? 360 : 0))
                     .padding(-14)
                     .animation(.smooth(duration: 0.8), value: ring)
                 Circle()
                     .fill(connected
-                          ? AnyShapeStyle(copper.opacity(0.18))
+                          ? theme.discFill(opacity: 0.18)
                           : AnyShapeStyle(LinearGradient(colors: [.white.opacity(0.09), .white.opacity(0.03)], startPoint: .top, endPoint: .bottom)))
                     .overlay(Circle().stroke(LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.05), copper.opacity(0.4)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
                     .shadow(color: copper.opacity(connected ? 0.55 : busy ? 0.3 : 0.12), radius: connected ? 46 : 28)
@@ -599,21 +627,38 @@ private struct StatusCaption: View {
                         Text(entry.displayName).lineLimit(1)
                         Image(systemName: "arrow.right").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
                     }
-                    if let flag = server?.flag { Text(flag) }
-                    Text(server?.displayName ?? L("Добавьте сервер")).lineLimit(1)
+                    // A new server slides in from below, like the speed digits, so the change is noticed.
+                    HStack(spacing: 6) {
+                        if let flag = server?.flag { Text(flag) }
+                        Text(server?.displayName ?? L("Добавьте сервер")).lineLimit(1)
+                    }
+                    .id(server?.id)
+                    .transition(.push(from: .bottom).combined(with: .opacity))
                     if status == .connected, let connectedDate {
                         Text("·")
-                        Text(connectedDate, style: .timer).monospacedDigit()
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            Text(Self.sessionLength(since: connectedDate, now: context.date)).monospacedDigit().contentTransition(.numericText())
+                        }
                     }
                     Image(systemName: "chevron.right").font(.caption.weight(.bold))
                 }
                 .font(.subheadline)
                 .opacity(0.9)
+                .clipped()
+                .animation(.smooth(duration: 0.35), value: server?.id)
             }
             .buttonStyle(.plain)
             .accessibilityHint("Открыть список серверов")
         }
         .multilineTextAlignment(.center)
+    }
+
+    /// "4:05" for the first hour, then "2 ч 14 мин", then "1 д 3 ч": seconds only matter at the start.
+    static func sessionLength(since start: Date, now: Date) -> String {
+        let s = max(0, Int(now.timeIntervalSince(start)))
+        if s < 3600 { return String(format: "%d:%02d", s / 60, s % 60) }
+        if s < 86_400 { return String(format: L("%lld ч %lld мин"), s / 3600, s % 3600 / 60) }
+        return String(format: L("%lld д %lld ч"), s / 86_400, s % 86_400 / 3600)
     }
 
     private var title: String {
@@ -673,7 +718,7 @@ private struct ConnectionInfo: View {
             if let exit {
                 Text(flag(exit.country)).font(.title2)
                 Button {
-                    Clipboard.copy(exit.ip)
+                    Clipboard.copy(exit.ip, toast: nil)
                     withAnimation(.smooth) { copied = true }
                     Task { try? await Task.sleep(for: .seconds(1.6)); withAnimation(.smooth) { copied = false } }
                 } label: {

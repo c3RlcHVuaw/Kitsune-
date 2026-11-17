@@ -20,10 +20,7 @@ struct SettingsView: View {
     @AppStorage("haptics") private var haptics = true
     @AppStorage("lanShare") private var lanShare = false
     @State private var sharePassword = LANSharing.password()
-    @State private var passwordCopied = false
     @State private var showQR = false
-    @State private var shareCopied = false
-    @State private var cardCopied = false
     #endif
     @State private var transferNote: LocalizedStringKey?
     @AppStorage("onboardingDone") private var onboardingDone = true
@@ -240,7 +237,7 @@ struct SettingsView: View {
 
     private var tiles: [Tile] {
         var list = [
-            Tile(pane: .design, status: L(themeTitle)),
+            Tile(pane: .design, status: themeTitle),
             Tile(pane: .launch, status: L("Автоподключение: ") + onOff(autoConnectValue)),
             Tile(pane: .protection, status: verdict.title, dot: verdict.dot),
         ]
@@ -296,11 +293,10 @@ struct SettingsView: View {
             }
             HStack(spacing: 8) {
                 #if os(macOS)
-                chipButton(shareCopied ? "Ссылка скопирована" : "Поделиться") {
-                    Clipboard.copy(L("Kitsune: VPN, который не мешает. Российские сайты напрямую, остальное через туннель.") + " https://github.com/c3RlcHVuaw/Kitsune-/releases/latest")
-                    shareCopied = true
+                chipButton("Поделиться") {
+                    Clipboard.copy(L("Kitsune: VPN, который не мешает. Российские сайты напрямую, остальное через туннель.") + " https://github.com/c3RlcHVuaw/Kitsune-/releases/latest", toast: L("Ссылка скопирована"))
                 }
-                chipButton(cardCopied ? "Карточка скопирована" : "Моя карточка") { ShareCard.copy(); cardCopied = true }
+                chipButton("Моя карточка") { ShareCard.copy(); Toaster.shared.show(L("Карточка скопирована")) }
                 #endif
                 chipButton("Что нового?") { showNews = true }
             }
@@ -334,9 +330,7 @@ struct SettingsView: View {
     }
 
     private var theme: ButtonTheme { ButtonTheme(rawValue: themeRaw) ?? .copper }
-    private var themeTitle: String {
-        switch theme { case .copper: "Медь"; case .moon: "Луна"; case .neon: "Неон" }
-    }
+    private var themeTitle: String { theme.name }
 
     private var designPane: some View {
         VStack(spacing: 16) {
@@ -347,9 +341,9 @@ struct SettingsView: View {
                     Text("Пример").font(.caption.weight(.medium)).foregroundStyle(.secondary)
                 }
                 ZStack {
-                    Circle().stroke(theme.accent, lineWidth: 2.5).padding(-10)
+                    ThemeStroke(theme: theme).padding(-10).id(themeRaw)
                     Circle()
-                        .fill(theme.accent.opacity(0.35))
+                        .fill(theme.discFill(opacity: 0.35))
                         .shadow(color: theme.accent.opacity(minimal ? 0 : 0.5), radius: 30)
                         .kGlass(in: .circle, tint: theme.accent.opacity(0.45))
                     FoxMark(color: .white).frame(width: 56).offset(y: 3)
@@ -370,16 +364,22 @@ struct SettingsView: View {
                 }
                 HStack(spacing: 12) {
                     ForEach(ButtonTheme.allCases, id: \.self) { item in
-                        Button { withAnimation(.smooth) { themeRaw = item.rawValue } } label: {
-                            Circle().fill(item.accent).frame(width: 22, height: 22)
+                        let open = item.isUnlocked
+                        Button {
+                            if open { withAnimation(.smooth) { themeRaw = item.rawValue } }
+                            else { Toaster.shared.show(String(format: L("«%@» откроется на звании «%@»"), item.name, History.rankTitles[item.unlockLevel])) }
+                        } label: {
+                            Circle().fill(item.swatch).frame(width: 22, height: 22)
+                                .opacity(open ? 1 : 0.3)
+                                .overlay { if !open { Image(systemName: "lock.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(.white) } }
                                 .overlay(Circle().stroke(.white, lineWidth: themeRaw == item.rawValue ? 2 : 0).padding(-4))
                         }
                         .buttonStyle(.plain)
-                        .help(item.title)
+                        .help(open ? item.name : String(format: L("«%@» откроется на звании «%@»"), item.name, History.rankTitles[item.unlockLevel]))
                         .accessibilityLabel(item.title)
                     }
-                    Text(LocalizedStringKey(themeTitle)).font(.subheadline).foregroundStyle(.secondary)
                 }
+                Text(themeTitle).font(.subheadline).foregroundStyle(.secondary).contentTransition(.opacity)
             }
             .padding(18)
             .frame(maxWidth: .infinity)
@@ -460,16 +460,19 @@ struct SettingsView: View {
         ListSection(title: "Раздача по сети", footer: lanShare
             ? "Устройства в вашей сети смогут выходить в интернет через ваш VPN по этому адресу, логину и паролю. Применяется при следующем подключении. Не включайте в чужих и общих сетях."
             : "Для телевизора или консоли: они подключаются к Kitsune как к HTTP или SOCKS5 прокси, и их трафик идёт через туннель. Защищено случайным паролем.") {
-            toggleRow("Раздавать VPN по сети", $lanShare, icon: "wifi")
+            ListRow {
+                Label("Раздавать VPN по сети", systemImage: "wifi")
+                HelpButton(text: "Телевизор, приставка или другой компьютер подключаются к вашему Mac как к прокси и выходят в интернет через ваш VPN. Mac должен быть включён и подключён.", route: ["tv", "laptopcomputer", "server.rack", "globe"])
+                Spacer()
+                Toggle("", isOn: $lanShare).labelsHidden().toggleStyle(.switch).tint(accent)
+            }
             if lanShare {
                 ListRow { Text("Адрес"); Spacer(); Text("\(LANSharing.localAddress() ?? "—"):\(LANSharing.port)").monospacedDigit().foregroundStyle(.secondary).textSelection(.enabled) }
                 ListRow { Text("Логин"); Spacer(); Text(LANSharing.username).foregroundStyle(.secondary).textSelection(.enabled) }
                 ListRow { Text("Пароль"); Spacer(); Text(sharePassword).font(.body.monospaced()).foregroundStyle(.secondary).textSelection(.enabled) }
-                buttonRow(passwordCopied ? "Пароль скопирован" : "Скопировать пароль", "doc.on.doc") {
-                    Clipboard.copy(sharePassword); passwordCopied = true
-                }
+                buttonRow("Скопировать пароль", "doc.on.doc") { Clipboard.copy(sharePassword, toast: L("Пароль скопирован")) }
                 buttonRow("Показать QR-код", "qrcode") { showQR = true }
-                buttonRow("Сменить пароль", "arrow.triangle.2.circlepath") { sharePassword = LANSharing.regenerate(); passwordCopied = false }
+                buttonRow("Сменить пароль", "arrow.triangle.2.circlepath") { sharePassword = LANSharing.regenerate(); Toaster.shared.show(L("Пароль сменён")) }
             }
         }
         #endif

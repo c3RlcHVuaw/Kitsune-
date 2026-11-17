@@ -132,14 +132,43 @@ struct ListRow<Content: View>: View {
 }
 
 /// Colour of the connect button, its ring, the home glow and the speed chart.
+/// The last four are rewards: each opens at a rank (see `History.rankLevel`) and stays open for good.
 enum ButtonTheme: String, CaseIterable {
-    case copper, moon, neon
+    case copper, moon, neon, aurora, sunset, foxfire, gold
+
+    /// Animated themes: the ring and the disc slowly swirl through these colours.
+    var gradient: [Color]? {
+        switch self {
+        // Two neighbouring tones each: light and deep. Distant hues next to each other looked like a muddy rainbow.
+        case .aurora: [Color(red: 0.45, green: 0.98, blue: 0.80), Color(red: 0.18, green: 0.62, blue: 0.82)]
+        case .sunset: [Color(red: 1.0, green: 0.70, blue: 0.42), Color(red: 0.95, green: 0.36, blue: 0.48)]
+        case .foxfire: [Color(red: 0.62, green: 0.90, blue: 1.0), Color(red: 0.28, green: 0.42, blue: 1.0)]
+        case .gold: [Color(red: 1.0, green: 0.92, blue: 0.62), Color(red: 0.92, green: 0.62, blue: 0.16)]
+        default: nil
+        }
+    }
+
+    /// Rank needed to use the theme: 0 is open to everyone.
+    var unlockLevel: Int {
+        switch self { case .aurora: 1; case .sunset: 2; case .foxfire: 3; case .gold: 4; default: 0 }
+    }
+
+    @MainActor var isUnlocked: Bool { History.bestRankLevel >= unlockLevel }
+
+    /// What the swatch shows: a gradient for the reward themes, the plain colour otherwise.
+    var swatch: AnyShapeStyle {
+        if let gradient { AnyShapeStyle(LinearGradient(colors: gradient, startPoint: .top, endPoint: .bottom)) } else { AnyShapeStyle(accent) }
+    }
 
     var accent: Color {
         switch self {
         case .copper: Color(red: 1.0, green: 0.50, blue: 0.10)
         case .moon: Color(red: 0.55, green: 0.70, blue: 1.0)
         case .neon: Color(red: 0.12, green: 0.95, blue: 0.62)
+        case .aurora: Color(red: 0.25, green: 0.88, blue: 0.75)
+        case .sunset: Color(red: 1.0, green: 0.45, blue: 0.40)
+        case .foxfire: Color(red: 0.40, green: 0.72, blue: 1.0)
+        case .gold: Color(red: 1.0, green: 0.78, blue: 0.28)
         }
     }
 
@@ -149,6 +178,10 @@ enum ButtonTheme: String, CaseIterable {
         case .copper: Color(red: 0.96, green: 0.80, blue: 0.62)
         case .moon: Color(red: 0.84, green: 0.90, blue: 1.0)
         case .neon: Color(red: 0.74, green: 1.0, blue: 0.90)
+        case .aurora: Color(red: 0.78, green: 1.0, blue: 0.92)
+        case .sunset: Color(red: 1.0, green: 0.84, blue: 0.80)
+        case .foxfire: Color(red: 0.84, green: 0.93, blue: 1.0)
+        case .gold: Color(red: 1.0, green: 0.95, blue: 0.78)
         }
     }
 
@@ -158,6 +191,10 @@ enum ButtonTheme: String, CaseIterable {
         case .copper: Color(red: 0.85, green: 0.42, blue: 0.18)
         case .moon: Color(red: 0.40, green: 0.52, blue: 0.92)
         case .neon: Color(red: 0.08, green: 0.75, blue: 0.50)
+        case .aurora: Color(red: 0.20, green: 0.60, blue: 0.70)
+        case .sunset: Color(red: 0.85, green: 0.30, blue: 0.40)
+        case .foxfire: Color(red: 0.25, green: 0.40, blue: 0.95)
+        case .gold: Color(red: 0.85, green: 0.62, blue: 0.20)
         }
     }
 
@@ -167,12 +204,26 @@ enum ButtonTheme: String, CaseIterable {
         case .copper: ("Glass", "Pop")
         case .moon: ("Ping", "Tink")
         case .neon: ("Hero", "Bottle")
+        case .aurora: ("Purr", "Tink")
+        case .sunset: ("Glass", "Bottle")
+        case .foxfire: ("Submarine", "Pop")
+        case .gold: ("Hero", "Glass")
         }
     }
 
-    var title: LocalizedStringKey {
-        switch self { case .copper: "Медь"; case .moon: "Луна"; case .neon: "Неон" }
+    var name: String {
+        switch self {
+        case .copper: L("Медь")
+        case .moon: L("Луна")
+        case .neon: L("Неон")
+        case .aurora: L("Северное сияние")
+        case .sunset: L("Закат")
+        case .foxfire: L("Кицунэби")
+        case .gold: L("Золото ёкая")
+        }
     }
+
+    var title: LocalizedStringKey { LocalizedStringKey(name) }
 }
 
 /// A short burst of sparks from the middle of the connect button.
@@ -355,5 +406,136 @@ struct EmptyState<Actions: View>: View {
         }
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// One short confirmation for every "copied / saved" action, at the bottom of the window.
+@MainActor @Observable final class Toaster {
+    static let shared = Toaster()
+    private(set) var message: String?
+    private var hide: Task<Void, Never>?
+
+    func show(_ text: String) {
+        withAnimation(.smooth(duration: 0.3)) { message = text }
+        hide?.cancel()
+        hide = Task {
+            try? await Task.sleep(for: .seconds(1.8))
+            guard !Task.isCancelled else { return }
+            withAnimation(.smooth(duration: 0.3)) { message = nil }
+        }
+    }
+}
+
+struct ToastOverlay: View {
+    var body: some View {
+        if let message = Toaster.shared.message {
+            Label(message, systemImage: "checkmark.circle.fill")
+                .font(.footnote.weight(.medium))
+                .padding(.horizontal, 14).padding(.vertical, 9)
+                .kGlass(in: .capsule)
+                .padding(.bottom, 64)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .allowsHitTesting(false)
+                .id(message)
+        }
+    }
+}
+
+/// A small "?" next to a setting that needs a sentence of explanation; the popover can show the route as icons.
+struct HelpButton: View {
+    let text: LocalizedStringKey
+    var route: [String] = []
+    @State private var shown = false
+
+    var body: some View {
+        Button { shown.toggle() } label: {
+            Image(systemName: "questionmark.circle").foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Что это?")
+        .popover(isPresented: $shown, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 12) {
+                if !route.isEmpty {
+                    HStack(spacing: 8) {
+                        ForEach(Array(route.enumerated()), id: \.offset) { index, symbol in
+                            if index > 0 { Image(systemName: "arrow.right").font(.caption2.weight(.bold)).foregroundStyle(.tertiary) }
+                            Image(systemName: symbol).font(.title3).foregroundStyle(Color.brand)
+                        }
+                    }
+                }
+                Text(text).font(.callout).fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .frame(width: 280, alignment: .leading)
+        }
+    }
+}
+
+/// A soft light sweeping over placeholders while something loads, instead of an empty space.
+struct Shimmer: ViewModifier {
+    @State private var phase: CGFloat = -0.6
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                GeometryReader { geo in
+                    LinearGradient(colors: [.clear, .white.opacity(0.14), .clear], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: geo.size.width * 0.5)
+                        .offset(x: phase * geo.size.width)
+                }
+                .mask(content)
+                .opacity(reduceMotion ? 0 : 1)
+            }
+            .onAppear { withAnimation(.linear(duration: 1.3).repeatForever(autoreverses: false)) { phase = 1.1 } }
+    }
+}
+
+extension View {
+    func shimmer() -> some View { modifier(Shimmer()) }
+}
+
+/// The connect button's ring: the theme colour, or for the reward themes a gradient that slowly turns around.
+/// `color` overrides it (the amber/red latency warning).
+struct ThemeStroke: View {
+    let theme: ButtonTheme
+    var color: Color?
+    var trim: Double = 1
+    var lineWidth: CGFloat = 2.5
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var turn = false
+
+    var body: some View {
+        if let gradient = theme.gradient, color == nil {
+            // A calm rim in the deep tone with one bright comet slowly running around it.
+            let comet = AngularGradient(stops: [
+                .init(color: gradient[1].opacity(0), location: 0.45),
+                .init(color: gradient[1], location: 0.8),
+                .init(color: gradient[0], location: 0.97),
+                .init(color: gradient[0].opacity(0), location: 0.975),
+            ], center: .center)
+            ZStack {
+                Circle().trim(from: 0, to: trim).stroke(gradient[1].opacity(0.35), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                Circle().trim(from: 0, to: trim).stroke(comet, style: StrokeStyle(lineWidth: lineWidth + 0.5, lineCap: .round))
+                    .shadow(color: gradient[0].opacity(0.8), radius: 4)
+                    .rotationEffect(.degrees(turn ? 360 : 0))
+            }
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.linear(duration: 6).repeatForever(autoreverses: false)) { turn = true }
+            }
+        } else {
+            Circle().trim(from: 0, to: trim).stroke(color ?? theme.accent, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+        }
+    }
+}
+
+extension ButtonTheme {
+    /// The disc behind the fox when connected.
+    func discFill(opacity: Double) -> AnyShapeStyle {
+        guard let gradient else { return AnyShapeStyle(accent.opacity(opacity)) }
+        // Soft light from the upper left into the deep tone: volume without seams.
+        return AnyShapeStyle(RadialGradient(colors: [gradient[0].opacity(opacity * 1.5), gradient[1].opacity(opacity * 1.2)],
+                                            center: UnitPoint(x: 0.35, y: 0.28), startRadius: 0, endRadius: 140))
     }
 }

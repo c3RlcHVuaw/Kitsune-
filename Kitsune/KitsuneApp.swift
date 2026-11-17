@@ -28,6 +28,7 @@ struct KitsuneApp: App {
 
     private var root: some View {
         RootView(vpn: vpn, library: library, tab: $tab)
+            .overlay(alignment: .bottom) { ToastOverlay() }
             .tint(.white)
             .modifier(WhatsNewModifier())
             // vless:// and similar links open Kitsune and add the server.
@@ -136,6 +137,8 @@ struct RootView: View {
     #if os(macOS)
     /// Narrow window: the tab bar would collapse into a ">>" menu, so show icons only.
     @State private var compact = false
+    /// A window wide enough for two screens: Home keeps its width and the server list sits next to it.
+    @State private var wide = false
     #endif
 
     var body: some View {
@@ -183,6 +186,7 @@ struct RootView: View {
         }
         #if os(macOS)
         .onGeometryChange(for: Bool.self) { $0.size.width < 540 } action: { compact = $0 }
+        .onGeometryChange(for: Bool.self) { $0.size.width >= 940 } action: { new in withAnimation(.smooth) { wide = new } }
         .alert("Нужен пароль администратора", isPresented: .constant(vpn.showPasswordExplainer)) {
             Button("Продолжить") { vpn.answerPasswordExplainer(true) }
             Button("Отмена", role: .cancel) { vpn.answerPasswordExplainer(false) }
@@ -200,8 +204,8 @@ struct RootView: View {
             for delay in [1.0, 4.0, 8.0] {
                 try? await Task.sleep(for: .seconds(delay))
                 if vpn.status.isActive || vpn.lastError != nil { return }
-                if vpn.status == .disconnected || vpn.status == .invalid, let server = library.selected {
-                    await vpn.connect(server, servers: library.allServers, routing: library.routing)
+                if vpn.status == .disconnected || vpn.status == .invalid, library.selected != nil {
+                    await library.connect(vpn)
                 }
             }
         }
@@ -218,7 +222,21 @@ struct RootView: View {
     @ViewBuilder private func screen(_ item: AppTab) -> some View {
         Group {
             switch item {
-            case .home: HomeView(vpn: vpn, library: library, tab: $tab)
+            case .home:
+                #if os(macOS)
+                if wide {
+                    HStack(spacing: 0) {
+                        HomeView(vpn: vpn, library: library, tab: $tab).frame(width: 500)
+                        Divider().opacity(0.4)
+                        ServersView(library: library, tunnelUp: vpn.status == .connected)
+                            .background(Color(red: 0.028, green: 0.026, blue: 0.030).opacity(0.6))
+                    }
+                } else {
+                    HomeView(vpn: vpn, library: library, tab: $tab)
+                }
+                #else
+                HomeView(vpn: vpn, library: library, tab: $tab)
+                #endif
             case .servers: ServersView(library: library, tunnelUp: vpn.status == .connected)
             case .routing: RoutingView(library: library)
             case .settings: SettingsView(vpn: vpn, library: library)
@@ -311,8 +329,8 @@ private struct MenuBarContent: View {
         Button(vpn.status.isActive ? L("Отключить") : L("Подключить")) {
             if vpn.status.isActive {
                 vpn.disconnect()
-            } else if let server = library.selected {
-                Task { await vpn.connect(server, servers: library.allServers, routing: library.routing) }
+            } else if library.selected != nil {
+                Task { await library.connect(vpn) }
             }
         }
         .disabled(library.selected == nil || vpn.status == .disconnecting)
