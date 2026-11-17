@@ -85,7 +85,7 @@ public static class ConfigBuilder
         if (dnsRules.Count > 0) dns["rules"] = dnsRules;
         if (routing.BlockIPv6) dns["strategy"] = "ipv4_only";
 
-        var outbounds = ProxyOutbounds(server, servers);
+        var outbounds = ProxyOutbounds(server, servers, routing.EntryServerId);
         outbounds.Add(new() { ["type"] = "direct", ["tag"] = "direct" });
         var config = new Obj
         {
@@ -124,17 +124,19 @@ public static class ConfigBuilder
     }
 
     /// Every server as its own outbound, plus a `proxy` selector defaulting to the chosen one.
-    static List<Obj> ProxyOutbounds(ServerConfig selected, IReadOnlyList<ServerConfig> others)
+    static List<Obj> ProxyOutbounds(ServerConfig selected, IReadOnlyList<ServerConfig> others, string? entryId)
     {
         var seen = new HashSet<string>();
         var all = new[] { selected }.Concat(others).Where(s => seen.Add(s.Id)).ToList();
+        var entry = all.FirstOrDefault(s => s.Id == entryId && s.Id != selected.Id);
         var outbounds = all.Select(s =>
         {
             var outbound = Json.ParseObject(s.Outbound) ?? throw new InvalidDataException($"corrupt outbound for {s.Name}");
             outbound["tag"] = Tag(s);
+            if (entry != null && s.Id != entry.Id) outbound["detour"] = Tag(entry);
             return outbound;
         }).ToList();
-        outbounds.Add(new() { ["type"] = "selector", ["tag"] = "proxy", ["outbounds"] = all.Select(Tag).ToList(), ["default"] = Tag(selected) });
+        outbounds.Add(new() { ["type"] = "selector", ["tag"] = "proxy", ["outbounds"] = all.Where(s => s.Id != entry?.Id).Select(Tag).ToList(), ["default"] = Tag(selected) });
         return outbounds;
     }
 

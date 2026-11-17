@@ -47,10 +47,13 @@ public struct RoutingSettings: Codable, Equatable, Sendable {
     public var proxyApps: [String]
     /// macOS only: process name → id of the server that app always uses (e.g. one browser via Netherlands).
     public var appServers: [String: String]
+    /// Double hop: id of the entry server every other server is reached through (nil: off).
+    public var entryServerID: String?
 
     public init(profile: Profile = .russiaDirect, direct: [String] = [], proxy: [String] = [], presets: Set<RoutePreset> = [],
                 directApps: [String] = [], proxyApps: [String] = [], appServers: [String: String] = [:],
-                dns: DNSProvider = .cloudflare, blockAds: Bool = false, blockIPv6: Bool = false) {
+                dns: DNSProvider = .cloudflare, blockAds: Bool = false, blockIPv6: Bool = false, entryServerID: String? = nil) {
+        self.entryServerID = entryServerID
         self.blockIPv6 = blockIPv6
         self.dns = dns
         self.blockAds = blockAds
@@ -76,6 +79,7 @@ public struct RoutingSettings: Codable, Equatable, Sendable {
         directApps = try c.decodeIfPresent([String].self, forKey: .directApps) ?? []
         proxyApps = try c.decodeIfPresent([String].self, forKey: .proxyApps) ?? []
         appServers = try c.decodeIfPresent([String: String].self, forKey: .appServers) ?? [:]
+        entryServerID = try c.decodeIfPresent(String.self, forKey: .entryServerID)
     }
 
     /// The user's "through VPN" list plus the domains of every enabled preset.

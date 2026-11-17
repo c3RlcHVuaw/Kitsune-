@@ -115,7 +115,7 @@ public enum ConfigBuilder {
                 "auto_route": true,
                 "strict_route": true,
             ]],
-            "outbounds": try proxyOutbounds(selected: server, others: servers) + [["type": "direct", "tag": "direct"]],
+            "outbounds": try proxyOutbounds(selected: server, others: servers, entryID: routing.entryServerID) + [["type": "direct", "tag": "direct"]],
             "route": route,
         ]
         if let share, share.isSafe, var inbounds = config["inbounds"] as? [[String: Any]] {
@@ -141,20 +141,23 @@ public enum ConfigBuilder {
     }
 
     /// Every server as its own outbound, plus a `proxy` selector defaulting to the chosen one.
-    private static func proxyOutbounds(selected: ServerConfig, others: [ServerConfig]) throws -> [[String: Any]] {
+    /// With `entryID` (double hop) every other server is dialed through that entry server and leaves the selector.
+    private static func proxyOutbounds(selected: ServerConfig, others: [ServerConfig], entryID: String?) throws -> [[String: Any]] {
         var seen = Set<String>()
         let all = ([selected] + others).filter { seen.insert($0.id).inserted }
+        let entry = all.first { $0.id == entryID && $0.id != selected.id }
         var outbounds: [[String: Any]] = try all.map { server in
             guard var outbound = try JSONSerialization.jsonObject(with: Data(server.outbound.utf8)) as? [String: Any] else {
                 throw CocoaError(.coderReadCorrupt)
             }
             outbound["tag"] = tag(for: server)
+            if let entry, server.id != entry.id { outbound["detour"] = tag(for: entry) }
             return outbound
         }
         outbounds.append([
             "type": "selector",
             "tag": "proxy",
-            "outbounds": all.map(tag(for:)),
+            "outbounds": all.filter { $0.id != entry?.id }.map(tag(for:)),
             "default": tag(for: selected),
         ])
         return outbounds

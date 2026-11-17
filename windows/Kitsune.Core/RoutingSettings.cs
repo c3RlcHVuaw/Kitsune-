@@ -48,6 +48,8 @@ public sealed class RoutingSettings
     public List<string> DirectApps { get; set; } = [];
     public List<string> ProxyApps { get; set; } = [];
     public Dictionary<string, string> AppServers { get; set; } = [];
+    /// Double hop: id of the entry server every other server is reached through (null: off).
+    public string? EntryServerId { get; set; }
 
     [JsonIgnore]
     public IEnumerable<string> EffectiveProxy => Proxy.Concat(Enum.GetValues<RoutePreset>().Where(Presets.Contains).SelectMany(p => p.Domains()));

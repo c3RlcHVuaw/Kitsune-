@@ -13,3 +13,16 @@ func matchesGoldenConfig(name: String, routing: RoutingSettings) throws {
     // Regenerate after an intentional change: copy the printed config into Golden/<name>.json.
     #expect(config == golden.trimmingCharacters(in: .whitespacesAndNewlines), "\(config)")
 }
+
+@Test func doubleHopChainsExitsThroughEntry() throws {
+    let exit = try ProxyLink.parse(sampleLink)
+    var entry = try ProxyLink.parse(sampleLink.replacingOccurrences(of: "#Test%20NL", with: "#Entry"))
+    entry.id = "entry-id"
+    let config = try ConfigBuilder.build(exit, servers: [entry], routing: RoutingSettings(entryServerID: entry.id))
+    let json = try #require(JSONSerialization.jsonObject(with: Data(config.utf8)) as? [String: Any])
+    let outbounds = try #require(json["outbounds"] as? [[String: Any]])
+    #expect(outbounds.first { $0["tag"] as? String == ConfigBuilder.tag(for: exit) }?["detour"] as? String == ConfigBuilder.tag(for: entry))
+    #expect(outbounds.first { $0["tag"] as? String == ConfigBuilder.tag(for: entry) }?["detour"] == nil)
+    let selector = try #require(outbounds.first { $0["tag"] as? String == "proxy" })
+    #expect(selector["outbounds"] as? [String] == [ConfigBuilder.tag(for: exit)])
+}

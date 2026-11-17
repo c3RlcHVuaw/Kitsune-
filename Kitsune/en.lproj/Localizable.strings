@@ -421,3 +421,7 @@
 "VPN возвращается сам" = "VPN comes back by itself";
 "Если VPN был включён, после обновления он подключится снова." = "If the VPN was on, it reconnects after the update.";
 "Старые Маки, в том числе с Intel, поддерживаются." = "Older Macs, Intel ones included, are supported.";
+"Двойной прыжок" = "Double hop";
+"Трафик идёт через два сервера: входной не видит, куда вы заходите, а выходной не знает, кто вы. Скорость ниже, чем с одним сервером. Применяется при следующем подключении." = "Traffic goes through two servers: the entry one can't see where you go, the exit one doesn't know who you are. Slower than a single server. Applies on next connect.";
+"Через входной сервер" = "Route via an entry server";
+"Входной сервер" = "Entry server";

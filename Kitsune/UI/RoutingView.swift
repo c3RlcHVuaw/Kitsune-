@@ -14,6 +14,9 @@ struct RoutingView: View {
                     VStack(spacing: 22) {
                         profilePicker.appear(0)
                         ProtectionSection(dns: binding(\.dns), blockAds: binding(\.blockAds), blockIPv6: binding(\.blockIPv6)).appear(1)
+                        #if os(macOS)
+                        DoubleHopSection(library: library).appear(1)
+                        #endif
                         if library.routing.profile == .russiaDirect { RussianListsSection().appear(1) }
                         if library.routing.usesUserLists {
                             PresetsSection(presets: binding(\.presets)).appear(2)
@@ -177,6 +180,45 @@ private struct AppsSection: View {
 }
 
 /// Apps pinned to a specific server, e.g. one browser through Netherlands while everything else uses the selected server.
+/// Double hop: traffic goes to the entry server first and leaves through the one chosen on "Серверы".
+private struct DoubleHopSection: View {
+    let library: Library
+
+    private var entry: ServerConfig? { library.allServers.first { $0.id == library.routing.entryServerID } }
+
+    var body: some View {
+        ListSection(title: "Двойной прыжок", footer: "Трафик идёт через два сервера: входной не видит, куда вы заходите, а выходной не знает, кто вы. Скорость ниже, чем с одним сервером. Применяется при следующем подключении.") {
+            ListRow {
+                Text("Через входной сервер")
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { library.routing.entryServerID != nil },
+                    set: { on in
+                        let others = library.allServers.filter { $0.id != library.selected?.id }
+                        library.routing.entryServerID = on ? others.first?.id : nil
+                    }
+                ))
+                .labelsHidden().toggleStyle(.switch).tint(accent)
+                .disabled(library.allServers.count < 2)
+            }
+            if library.routing.entryServerID != nil {
+                ListRow {
+                    Text("Входной сервер")
+                    Spacer()
+                    Menu {
+                        ForEach(library.allServers) { server in
+                            Button(server.displayName) { library.routing.entryServerID = server.id }
+                        }
+                    } label: {
+                        Text(entry?.displayName ?? L("сервер удалён")).lineLimit(1).foregroundStyle(.secondary)
+                    }
+                    .menuStyle(.button).buttonStyle(.plain).fixedSize()
+                }
+            }
+        }
+    }
+}
+
 private struct AppServersSection: View {
     let library: Library
 
