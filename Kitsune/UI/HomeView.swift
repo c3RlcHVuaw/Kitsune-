@@ -341,6 +341,17 @@ private struct ConnectButton: View {
     @State private var asleep = false
     @State private var wake = 0
     @State private var nodOffset: CGFloat = 0
+    /// Cursor over the button, in its 200 pt frame: the fox looks at it, and purrs when it stays.
+    @State private var hover: CGPoint?
+    @State private var purring = false
+
+    private var awake: Bool { hover != nil && !sleeping && !busy && !error && !dizzy }
+    private var look: CGSize {
+        guard let hover else { return .zero }
+        let dx = (hover.x - 100) / 100, dy = (hover.y - 100) / 100
+        let len = max(hypot(dx, dy), 1)
+        return CGSize(width: dx / len, height: dy / len)
+    }
 
     private var sleeping: Bool { asleep && !connected && !busy && !error }
     private var copper: Color { theme.accent }
@@ -386,6 +397,12 @@ private struct ConnectButton: View {
                         }
                     }
                     .animation(.smooth(duration: 0.8), value: sleeping)
+                    .overlay {
+                        if awake {
+                            if purring { FoxSleepEyes().stroke(.black.opacity(0.7), style: StrokeStyle(lineWidth: 2.4, lineCap: .round)).offset(y: 4) }
+                            else { FoxPupils(look: look).fill(.black.opacity(0.75)).offset(y: 4) }
+                        }
+                    }
                     .overlay { FoxEyes().stroke(.black.opacity(0.7), style: StrokeStyle(lineWidth: 2.6, lineCap: .round, lineJoin: .round)).opacity(dizzy ? 1 : 0).offset(y: 4) }
                     .rotation3DEffect(.degrees(flipAngle), axis: (x: 0, y: 1, z: 0))
                     .frame(width: 88)
@@ -426,7 +443,28 @@ private struct ConnectButton: View {
             withAnimation(.easeIn(duration: 0.15)) { dizzy = true }
             Task { try? await Task.sleep(for: .seconds(1.8)); withAnimation(.easeOut(duration: 0.4)) { dizzy = false } }
         }
-        .onHover { _ in asleep = false; wake += 1 }
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let point):
+                if hover == nil || asleep { asleep = false; wake += 1 }
+                hover = point
+            case .ended:
+                hover = nil
+            }
+        }
+        .task(id: hover == nil) {
+            // Hold the cursor on the fox for two seconds and it purrs: closed eyes and a soft haptic hum.
+            guard hover != nil, !reduceMotion else { return }
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, awake else { return }
+            withAnimation(.easeOut(duration: 0.2)) { purring = true }
+            for _ in 0..<10 {
+                guard !Task.isCancelled else { break }
+                Feedback.tap(firm: false)
+                try? await Task.sleep(for: .milliseconds(140))
+            }
+            withAnimation(.easeOut(duration: 0.3)) { purring = false }
+        }
         .task(id: "\(connected)\(busy)\(error)\(wake)") {
             // After a quiet minute and a half without a connection the fox dozes off; a touch wakes it.
             guard !connected, !busy, !error, !reduceMotion else { asleep = false; return }
@@ -478,6 +516,20 @@ private struct FoxEyes: Shape {
         return Path { p in
             p.move(to: pt(0.27, 0.40)); p.addLine(to: pt(0.37, 0.45)); p.addLine(to: pt(0.27, 0.50))
             p.move(to: pt(0.73, 0.40)); p.addLine(to: pt(0.63, 0.45)); p.addLine(to: pt(0.73, 0.50))
+        }
+    }
+}
+
+/// Two round pupils that look toward `look` (a vector of length up to 1).
+private struct FoxPupils: Shape {
+    var look: CGSize
+    func path(in r: CGRect) -> Path {
+        Path { p in
+            for x in [0.33, 0.67] as [CGFloat] {
+                let c = CGPoint(x: r.minX + r.width * (x + look.width * 0.03), y: r.minY + r.height * (0.45 + look.height * 0.025))
+                let d = r.width * 0.075
+                p.addEllipse(in: CGRect(x: c.x - d / 2, y: c.y - d / 2, width: d, height: d * 1.25))
+            }
         }
     }
 }

@@ -45,7 +45,7 @@ struct SettingsView: View {
 
     /// One settings page; nil is the overview with the tiles.
     enum Pane: String, CaseIterable, Identifiable {
-        case design, launch, protection, sharing, data, updates, more
+        case design, launch, protection, sharing, data, updates, more, passport
         var id: String { rawValue }
         var title: String {
             switch self {
@@ -56,6 +56,7 @@ struct SettingsView: View {
             case .data: L("Данные")
             case .updates: L("Обновления")
             case .more: L("Ещё")
+            case .passport: L("Паспорт")
             }
         }
         var icon: String {
@@ -67,6 +68,7 @@ struct SettingsView: View {
             case .data: "chart.bar.fill"
             case .updates: "arrow.down"
             case .more: "gearshape"
+            case .passport: "globe.europe.africa.fill"
             }
         }
     }
@@ -77,6 +79,7 @@ struct SettingsView: View {
     private static let fresh: [Pane: String] = [.data: "1.8.8"]
     @AppStorage("previousVersion") private var previousVersion = ""
     @AppStorage("openedPanes") private var openedPanes = ""
+    @State private var passportShown = false
 
     private func isNew(_ pane: Pane) -> Bool {
         guard let since = Self.fresh[pane], !previousVersion.isEmpty,
@@ -171,7 +174,7 @@ struct SettingsView: View {
         let peak = max(week.map { $0.down + $0.up }.max() ?? 1, 1)
         return VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 14) {
-                FoxMark(color: .white).frame(width: 30)
+                FoxWithTails(tails: History.tails, color: .white).frame(width: 46)
                     .frame(width: 56, height: 56)
                     .background(accent.opacity(0.35), in: .circle)
                     .overlay(Circle().stroke(accent.opacity(0.6), lineWidth: 1))
@@ -192,7 +195,11 @@ struct SettingsView: View {
                     .help(rank.hint)
                 }
                 Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
             }
+            .contentShape(.rect)
+            .onTapGesture { open(.passport) }
+            .help(L("Паспорт путешественника"))
             Divider().opacity(0.5)
             HStack(alignment: .top, spacing: 14) {
                 Button { open(.data) } label: {
@@ -327,6 +334,77 @@ struct SettingsView: View {
         case .data: dataPane
         case .updates: updatesPane
         case .more: morePane
+        case .passport: passportPane
+        }
+    }
+
+    /// One stamp per exit country, first visit date and hours spent, plus milestones to reach.
+    private var passportPane: some View {
+        let stamps = History.stamps
+        let hours = stamps.reduce(0) { $0 + $1.seconds } / 3600
+        let goals = [3, 5, 10, 20]
+        let next = goals.first { $0 > stamps.count }
+        let previous = goals.last { $0 <= stamps.count } ?? 0
+        let newest = stamps.last.flatMap { Date.now.timeIntervalSince($0.first) < 7 * 86_400 ? $0.country : nil }
+        return VStack(spacing: 16) {
+            VStack(spacing: 10) {
+                FoxWithTails(tails: History.tails, color: accent, fan: passportShown ? 1 : 0).frame(width: 96)
+                    .animation(.spring(duration: 1.1, bounce: 0.35).delay(0.15), value: passportShown)
+                Text(History.rank.title).font(.display(16, relativeTo: .headline))
+                HStack(spacing: 28) {
+                    passportStat(passportShown ? stamps.count : 0, L("стран"))
+                    passportStat(passportShown ? Int(hours) : 0, L("часов"))
+                    passportStat(passportShown ? stamps.reduce(0) { $0 + $1.visits } : 0, L("визитов"))
+                }
+                if let next {
+                    VStack(spacing: 6) {
+                        Capsule().fill(.white.opacity(0.1)).frame(height: 6)
+                            .overlay(alignment: .leading) {
+                                GeometryReader { geo in
+                                    Capsule().fill(accent)
+                                        .frame(width: geo.size.width * (passportShown ? CGFloat(stamps.count - previous) / CGFloat(next - previous) : 0))
+                                        .animation(.smooth(duration: 1.0).delay(0.4), value: passportShown)
+                                }
+                            }
+                        Text(String(format: L("До следующей отметки: %lld"), next - stamps.count)).font(.caption).foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 12)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(18)
+            .kGlass(in: .rect(cornerRadius: 24))
+            if stamps.isEmpty {
+                EmptyState(title: "Пока без штампов", text: "Подключитесь через сервер в новой стране, и здесь появится первый штамп.", symbol: "globe.europe.africa.fill") { EmptyView() }
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 12)], spacing: 12) {
+                    ForEach(Array(stamps.enumerated()), id: \.element.id) { index, stamp in
+                        PassportStamp(stamp: stamp, index: index, isNew: stamp.country == newest, accent: accent)
+                    }
+                }
+            }
+            ListSection {
+                ForEach(goals, id: \.self) { goal in
+                    ListRow {
+                        Label(String(format: L("%lld стран"), goal), systemImage: stamps.count >= goal ? "checkmark.seal.fill" : "lock.fill")
+                            .foregroundStyle(stamps.count >= goal ? accent : .secondary)
+                            .contentTransition(.symbolEffect(.replace))
+                        Spacer()
+                        Text(stamps.count >= goal ? L("Открыто") : String(format: L("ещё %lld"), goal - stamps.count)).font(.caption).foregroundStyle(.tertiary)
+                    }
+                }
+            }
+        }
+        .task { try? await Task.sleep(for: .milliseconds(120)); passportShown = true }
+        .onDisappear { passportShown = false }
+    }
+
+    private func passportStat(_ value: Int, _ title: String) -> some View {
+        VStack(spacing: 2) {
+            Text("\(value)").font(.display(22, relativeTo: .title2)).foregroundStyle(accent)
+                .contentTransition(.numericText(value: Double(value)))
+                .animation(.smooth(duration: 1.0).delay(0.3), value: value)
+            Text(title).font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -801,5 +879,55 @@ struct SettingsView: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+    }
+}
+
+
+/// A rubber stamp that thumps onto the page, one after another; a tap makes it wobble.
+private struct PassportStamp: View {
+    let stamp: History.Stamp
+    let index: Int
+    let isNew: Bool
+    let accent: Color
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var landed = false
+    @State private var wobble = 0.0
+
+    var body: some View {
+        // a slight, stable tilt per country so the page looks stamped by hand
+        let tilt = Double(stamp.country.unicodeScalars.reduce(0) { $0 + Int($1.value) } % 7) - 3
+        VStack(spacing: 6) {
+            Text(History.flag(stamp.country)).font(.system(size: 34))
+            Text(Locale.current.localizedString(forRegionCode: stamp.country) ?? stamp.country).font(.subheadline.weight(.semibold)).lineLimit(1)
+            Text(stamp.first.formatted(.dateTime.day().month(.abbreviated).year())).font(.caption).foregroundStyle(.secondary)
+            Text(String(format: L("%.1f ч · %lld раз"), stamp.seconds / 3600, stamp.visits)).font(.caption2).foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(accent.opacity(isNew ? 0.12 : 0.04), in: .rect(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(accent.opacity(0.7), lineWidth: 1.5))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(accent.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [4, 3])).padding(5))
+        .overlay(alignment: .topTrailing) {
+            if isNew {
+                Text("НОВЫЙ").font(.system(size: 9, weight: .bold)).foregroundStyle(.black)
+                    .padding(.horizontal, 6).padding(.vertical, 2).background(accent, in: .capsule).offset(x: 6, y: -6)
+            }
+        }
+        .rotationEffect(.degrees(tilt + wobble))
+        .scaleEffect(landed ? 1 : 1.9)
+        .opacity(landed ? 1 : 0)
+        .contentShape(.rect)
+        .onTapGesture {
+            Feedback.tap(firm: true)
+            guard !reduceMotion else { return }
+            Task { for v in [7.0, -5, 3, 0] { withAnimation(.spring(duration: 0.18)) { wobble = v }; try? await Task.sleep(for: .milliseconds(120)) } }
+        }
+        .task {
+            guard !landed else { return }
+            if reduceMotion { landed = true; return }
+            try? await Task.sleep(for: .milliseconds(300 + min(index, 12) * 90))
+            withAnimation(.spring(duration: 0.45, bounce: 0.3)) { landed = true }
+            Feedback.tap()
+        }
     }
 }

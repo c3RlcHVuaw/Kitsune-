@@ -19,7 +19,7 @@ private struct ShareCardView: View {
         let countries = Set(History.sessions.compactMap(\.country)).count
         VStack(spacing: 28) {
             HStack(spacing: 12) {
-                FoxMark(color: .brand).frame(width: 44, height: 44)
+                FoxWithTails(tails: History.tails, color: .brand).frame(width: 56, height: 56)
                 Text("kitsune").font(.display(26, relativeTo: .title))
                 Spacer()
             }

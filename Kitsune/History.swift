@@ -34,6 +34,8 @@ import Foundation
     }
     /// The highest rank ever reached: a broken streak never takes an opened theme away.
     static var bestRankLevel: Int { max(rankLevel, UserDefaults.standard.integer(forKey: "bestRank")) }
+    /// Fox tails for the rank: 1, 2, 3, 4 and nine for «Ёкай».
+    static var tails: Int { [1, 2, 3, 4, 9][min(bestRankLevel, 4)] }
     static let rankTitles = [L("Лисёнок"), L("Любопытная лиса"), L("Тихая лиса"), L("Лис-хранитель"), L("Ёкай")]
 
     static func end(down: Int64, up: Int64) {
@@ -42,9 +44,38 @@ import Foundation
         comeback = nil
         countryChange = nil
         guard Date.now.timeIntervalSince(current.start) >= 5 else { return } // failed attempts aren't history
+        if let c = current.country, !c.isEmpty { stamp(c, current.start) } // before `sessions` grows, so a first-run rebuild doesn't count it twice
         sessions = Array((sessions + [Session(server: current.server, country: current.country, start: current.start, end: .now, down: down, up: up)]).suffix(200))
         UserDefaults.standard.set(try? JSONEncoder().encode(sessions), forKey: key)
         UserDefaults.standard.set(bestRankLevel, forKey: "bestRank")
+    }
+
+    // MARK: Passport stamps
+
+    static func flag(_ code: String) -> String {
+        String(String.UnicodeScalarView(code.uppercased().unicodeScalars.compactMap { Unicode.Scalar(0x1F1A5 + $0.value) }))
+    }
+
+    struct Stamp: Codable, Identifiable { let country: String; let first: Date; var visits: Int; var seconds: Double; var id: String { country } }
+    private static let stampKey = "passportStamps"
+    /// One stamp per exit country, kept apart from the 200-session history so old trips never fall off.
+    static var stamps: [Stamp] {
+        var saved = (UserDefaults.standard.data(forKey: stampKey)).flatMap { try? JSONDecoder().decode([Stamp].self, from: $0) } ?? []
+        // first launch after the update: rebuild from the sessions we still have
+        if saved.isEmpty && !sessions.isEmpty {
+            for s in sessions { if let c = s.country, !c.isEmpty { merge(&saved, c, s.start, s.duration) } }
+            UserDefaults.standard.set(try? JSONEncoder().encode(saved), forKey: stampKey)
+        }
+        return saved.sorted { $0.first < $1.first }
+    }
+    private static func merge(_ list: inout [Stamp], _ c: String, _ date: Date, _ seconds: TimeInterval) {
+        if let i = list.firstIndex(where: { $0.country == c }) { list[i].visits += 1; list[i].seconds += seconds }
+        else { list.append(Stamp(country: c, first: date, visits: 1, seconds: seconds)) }
+    }
+    private static func stamp(_ c: String, _ start: Date) {
+        var list = stamps
+        merge(&list, c, start, Date.now.timeIntervalSince(start))
+        UserDefaults.standard.set(try? JSONEncoder().encode(list), forKey: stampKey)
     }
 
     /// Consecutive days with at least one connection, counting back from today (or yesterday, if today has none yet).
