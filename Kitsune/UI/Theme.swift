@@ -107,13 +107,25 @@ extension View {
 /// Native-style grouped list: a small caption above, rows inside ONE glass surface separated by hairlines, a footnote below.
 /// Replaces stacks of separate cards, which read as generic.
 struct ListSection<Content: View>: View {
+    @Environment(\.kitsuneTheme) private var theme
     var title: LocalizedStringKey?
+    /// Optional symbol before the title, in the theme colour.
+    var symbol: String?
     var footer: LocalizedStringKey?
+    /// Put the footer behind a "?" next to the title instead of under the list.
+    var footerAsHelp = false
     @ViewBuilder var content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let title { Text(title).font(.footnote).foregroundStyle(.secondary).padding(.leading, 16) }
+            if let title {
+                HStack(spacing: 6) {
+                    if let symbol { Image(systemName: symbol).font(.system(size: 11, weight: .bold)).foregroundStyle(theme.accent) }
+                    Text(title).font(.footnote.weight(symbol == nil ? .regular : .semibold)).foregroundStyle(.secondary)
+                    if footerAsHelp, let footer { HelpButton(text: footer).font(.footnote) }
+                }
+                .padding(.leading, 16)
+            }
             VStack(spacing: 0) {
                 Group(subviews: content) { rows in
                     ForEach(rows.indices, id: \.self) { index in
@@ -124,7 +136,7 @@ struct ListSection<Content: View>: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .kGlass(in: .rect(cornerRadius: 20))
-            if let footer { Text(footer).font(.footnote).foregroundStyle(.secondary).padding(.horizontal, 16) }
+            if let footer, !(footerAsHelp && title != nil) { Text(footer).font(.footnote).foregroundStyle(.secondary).padding(.horizontal, 16) }
         }
     }
 }
@@ -613,4 +625,22 @@ extension View {
 
     /// One readable column, centred, when the window is stretched wide.
     func readableWidth(_ width: CGFloat = 620) -> some View { frame(maxWidth: width).frame(maxWidth: .infinity) }
+}
+
+
+/// Small empty state for a list: the fox, a line and a hint what to do.
+struct MiniEmpty: View {
+    @Environment(\.kitsuneTheme) private var theme
+    let title: LocalizedStringKey
+    let hint: LocalizedStringKey
+    var body: some View {
+        HStack(spacing: 14) {
+            FoxMark(color: theme.soft.opacity(0.7)).frame(width: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(hint).font(.footnote).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+    }
 }

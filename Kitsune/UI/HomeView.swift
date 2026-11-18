@@ -640,7 +640,7 @@ private struct TopApps: View {
 }
 #endif
 
-private struct PressScale: ButtonStyle {
+struct PressScale: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.95 : 1)
@@ -727,25 +727,40 @@ private struct ProfileChip: View {
     @Environment(\.kitsuneTheme) private var theme
     @Binding var profile: RoutingSettings.Profile
     private var on: Bool { profile == .russiaDirect }
+    /// The chip names the profile that is really active, so a choice made on the Routes tab shows here too.
+    private var title: String {
+        switch profile {
+        case .russiaDirect: L("Россия напрямую")
+        case .allVPN: L("Весь трафик через VPN")
+        case .custom: L("Свои правила")
+        }
+    }
+    private var icon: String {
+        switch profile {
+        case .russiaDirect: "checkmark"
+        case .allVPN: "lock.shield.fill"
+        case .custom: "slider.horizontal.3"
+        }
+    }
 
     var body: some View {
         Button {
             withAnimation(.smooth) { profile = on ? .allVPN : .russiaDirect }
         } label: {
-            Label("Россия напрямую", systemImage: on ? "checkmark" : "arrow.triangle.branch")
-                .symbolEffect(.bounce, value: on)
+            Label(title, systemImage: icon)
+                .symbolEffect(.bounce, value: profile)
                 .contentTransition(.symbolEffect(.replace))
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(on ? theme.soft : .white.opacity(0.7))
+                .foregroundStyle(profile == .allVPN ? .white.opacity(0.7) : theme.soft)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(on ? theme.accent.opacity(0.18) : .clear, in: .capsule)
-                .overlay(Capsule().stroke(on ? theme.accent.opacity(0.5) : .white.opacity(0.15), lineWidth: 0.6))
+                .background(profile == .allVPN ? .clear : theme.accent.opacity(0.18), in: .capsule)
+                .overlay(Capsule().stroke(profile == .allVPN ? .white.opacity(0.15) : theme.accent.opacity(0.5), lineWidth: 0.6))
         }
         .buttonStyle(.plain)
         .kGlass(in: .capsule, interactive: true)
-        .sensoryFeedback(.selection, trigger: on)
-        .accessibilityValue(on ? L("Включено") : L("Выключено"))
+        .sensoryFeedback(.selection, trigger: profile)
+        .accessibilityValue(title)
         .accessibilityHint("Российские сайты без VPN")
     }
 }
