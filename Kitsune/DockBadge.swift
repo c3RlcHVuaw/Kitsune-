@@ -7,7 +7,8 @@ import SwiftUI
 @MainActor enum DockBadge {
     /// Hue shift from the original copper icon to each theme, in radians.
     private static func hue(_ theme: ButtonTheme) -> Double {
-        switch theme { case .copper: 0; case .moon: 3.32; case .neon: 2.27; case .aurora: 2.6; case .sunset: 5.8; case .foxfire: 3.6; case .gold: 0.35 }
+        switch theme { case .copper: 0; case .moon: 3.32; case .neon: 2.27; case .aurora: 2.6; case .sunset: 5.8; case .foxfire: 3.6; case .gold: 0.35
+        case .custom: ((NSColor(theme.accent).usingColorSpace(.sRGB)?.hueComponent ?? 0.045) - 0.045) * 2 * .pi }
     }
 
     static func update(connected: Bool, theme: ButtonTheme) {

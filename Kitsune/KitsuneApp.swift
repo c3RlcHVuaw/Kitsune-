@@ -30,6 +30,7 @@ struct KitsuneApp: App {
         RootView(vpn: vpn, library: library, tab: $tab)
             .overlay(alignment: .bottom) { ToastOverlay() }
             .tint(theme.accent)
+            .monospacedDigit() // every number keeps its width: speed, ping and traffic don't jitter
             .environment(\.kitsuneTheme, theme)
             .modifier(WhatsNewModifier())
             // vless:// and similar links open Kitsune and add the server.

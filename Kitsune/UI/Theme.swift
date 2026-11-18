@@ -155,8 +155,32 @@ struct ListRow<Content: View>: View {
 
 /// Colour of the connect button, its ring, the home glow and the speed chart.
 /// The last four are rewards: each opens at a rank (see `History.rankLevel`) and stays open for good.
-enum ButtonTheme: String, CaseIterable {
+enum ButtonTheme: Hashable, RawRepresentable {
     case copper, moon, neon, aurora, sunset, foxfire, gold
+    /// Own colour for the top rank: packed 0xRRGGBB, kept in the same preference as "custom:RRGGBB".
+    case custom(UInt32)
+
+    static let presets: [ButtonTheme] = [.copper, .moon, .neon, .aurora, .sunset, .foxfire, .gold]
+    private static let names: [String: ButtonTheme] = ["copper": .copper, "moon": .moon, "neon": .neon, "aurora": .aurora, "sunset": .sunset, "foxfire": .foxfire, "gold": .gold]
+
+    init?(rawValue: String) {
+        if let known = Self.names[rawValue] { self = known }
+        else if rawValue.hasPrefix("custom:"), let rgb = UInt32(rawValue.dropFirst(7), radix: 16) { self = .custom(rgb) }
+        else { return nil }
+    }
+
+    var rawValue: String {
+        switch self {
+        case .copper: "copper"
+        case .moon: "moon"
+        case .neon: "neon"
+        case .aurora: "aurora"
+        case .sunset: "sunset"
+        case .foxfire: "foxfire"
+        case .gold: "gold"
+        case .custom(let rgb): "custom:" + String(format: "%06X", rgb)
+        }
+    }
 
     /// Animated themes: the ring and the disc slowly swirl through these colours.
     var gradient: [Color]? {
@@ -172,7 +196,7 @@ enum ButtonTheme: String, CaseIterable {
 
     /// Rank needed to use the theme: 0 is open to everyone.
     var unlockLevel: Int {
-        switch self { case .aurora: 1; case .sunset: 2; case .foxfire: 3; case .gold: 4; default: 0 }
+        switch self { case .aurora: 1; case .sunset: 2; case .foxfire: 3; case .gold, .custom: 4; default: 0 }
     }
 
     @MainActor var isUnlocked: Bool { History.bestRankLevel >= unlockLevel }
@@ -191,6 +215,7 @@ enum ButtonTheme: String, CaseIterable {
         case .sunset: Color(red: 1.0, green: 0.45, blue: 0.40)
         case .foxfire: Color(red: 0.40, green: 0.72, blue: 1.0)
         case .gold: Color(red: 1.0, green: 0.78, blue: 0.28)
+        case .custom(let rgb): Color(red: Double(rgb >> 16 & 0xFF) / 255, green: Double(rgb >> 8 & 0xFF) / 255, blue: Double(rgb & 0xFF) / 255)
         }
     }
 
@@ -204,6 +229,7 @@ enum ButtonTheme: String, CaseIterable {
         case .sunset: Color(red: 1.0, green: 0.84, blue: 0.80)
         case .foxfire: Color(red: 0.84, green: 0.93, blue: 1.0)
         case .gold: Color(red: 1.0, green: 0.95, blue: 0.78)
+        case .custom: accent.mix(with: .white, by: 0.55)
         }
     }
 
@@ -217,6 +243,7 @@ enum ButtonTheme: String, CaseIterable {
         case .sunset: Color(red: 0.85, green: 0.30, blue: 0.40)
         case .foxfire: Color(red: 0.25, green: 0.40, blue: 0.95)
         case .gold: Color(red: 0.85, green: 0.62, blue: 0.20)
+        case .custom: accent.mix(with: .black, by: 0.2)
         }
     }
 
@@ -229,7 +256,7 @@ enum ButtonTheme: String, CaseIterable {
         case .aurora: ("Purr", "Tink")
         case .sunset: ("Glass", "Bottle")
         case .foxfire: ("Submarine", "Pop")
-        case .gold: ("Hero", "Glass")
+        case .gold, .custom: ("Hero", "Glass")
         }
     }
 
@@ -242,6 +269,7 @@ enum ButtonTheme: String, CaseIterable {
         case .sunset: L("Закат")
         case .foxfire: L("Кицунэби")
         case .gold: L("Золото ёкая")
+        case .custom: L("Свой цвет")
         }
     }
 
@@ -642,5 +670,18 @@ struct MiniEmpty: View {
             }
             Spacer(minLength: 0)
         }
+    }
+}
+
+extension ButtonTheme {
+    /// The theme for a colour picked on the Design pane.
+    static func custom(_ color: Color) -> ButtonTheme {
+        #if os(macOS)
+        let c = NSColor(color).usingColorSpace(.sRGB) ?? .orange
+        let pack = { (v: CGFloat) in UInt32((min(max(v, 0), 1) * 255).rounded()) }
+        return .custom(pack(c.redComponent) << 16 | pack(c.greenComponent) << 8 | pack(c.blueComponent))
+        #else
+        return .copper
+        #endif
     }
 }

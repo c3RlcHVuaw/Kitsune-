@@ -618,3 +618,11 @@
 "Длинные пояснения спрятаны за значок «?» рядом с заголовком секции." = "Long explanations are tucked behind a \"?\" next to the section title.";
 "Лиса в пустых списках" = "A fox in empty lists";
 "Пустые списки приложений и сайтов подсказывают, что делать, и на главной видно активный профиль." = "Empty app and site lists say what to do, and the home screen shows the active profile.";
+"Свой цвет" = "Your own colour";
+"Свой цвет темы" = "Your own theme colour";
+"На звании «Ёкай» открывается выбор любого цвета: он красит всё приложение, фон, лису и иконку в Dock." = "At the Yokai rank you can pick any colour: it tints the whole app, the background, the fox and the Dock icon.";
+"Ровные цифры" = "Steady digits";
+"Скорость, пинг и трафик больше не прыгают при обновлении: цифры одной ширины." = "Speed, ping and traffic no longer jitter while updating: digits have one width.";
+"Сайты чипами и перетаскивание" = "Site chips and drag and drop";
+"Сайты плашками с крестиком, а приложение или ссылку можно бросить на нужную секцию." = "Sites as chips with a cross, and you can drop an app or a link on the right section.";
+"Пустые списки подсказывают, что делать, а пояснения спрятаны за значок «?»." = "Empty lists say what to do, and explanations are tucked behind a \"?\".";

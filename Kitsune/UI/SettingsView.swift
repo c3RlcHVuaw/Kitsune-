@@ -408,6 +408,29 @@ struct SettingsView: View {
         }
     }
 
+    /// Own colour, open at the top rank: a colour well in the same row as the themes.
+    @ViewBuilder private var customColorTile: some View {
+        let open = History.bestRankLevel >= 4
+        let on: Bool = { if case .custom = theme { true } else { false } }()
+        if open {
+            ColorPicker(L("Свой цвет"), selection: Binding(
+                get: { on ? theme.accent : Color(red: 0.72, green: 0.55, blue: 1.0) },
+                set: { themeRaw = ButtonTheme.custom($0).rawValue }
+            ), supportsOpacity: false)
+            .labelsHidden()
+            .scaleEffect(0.8).frame(width: 28, height: 28)
+            .overlay(Circle().stroke(.white, lineWidth: on ? 2 : 0).frame(width: 30, height: 30))
+            .help(L("Свой цвет"))
+        } else {
+            Button { Toaster.shared.show(String(format: L("«%@» откроется на звании «%@»"), L("Свой цвет"), History.rankTitles[4])) } label: {
+                Image(systemName: "lock.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
+                    .frame(width: 22, height: 22).background(.white.opacity(0.12), in: .circle)
+            }
+            .buttonStyle(.plain)
+            .help(String(format: L("«%@» откроется на звании «%@»"), L("Свой цвет"), History.rankTitles[4]))
+        }
+    }
+
     private var theme: ButtonTheme { ButtonTheme(rawValue: themeRaw) ?? .copper }
     private var themeTitle: String { theme.name }
 
@@ -442,7 +465,7 @@ struct SettingsView: View {
                     Text("Защищено").font(.display(20, relativeTo: .title2)).transition(.opacity)
                 }
                 HStack(spacing: 12) {
-                    ForEach(ButtonTheme.allCases, id: \.self) { item in
+                    ForEach(ButtonTheme.presets, id: \.self) { item in
                         let open = item.isUnlocked
                         Button {
                             if open { withAnimation(.smooth) { themeRaw = item.rawValue }; Feedback.sound(item.sounds.connect, volume: 0.35) }
@@ -457,6 +480,7 @@ struct SettingsView: View {
                         .help(open ? item.name : String(format: L("«%@» откроется на звании «%@»"), item.name, History.rankTitles[item.unlockLevel]))
                         .accessibilityLabel(item.title)
                     }
+                    customColorTile
                 }
                 Text(themeTitle).font(.subheadline).foregroundStyle(.secondary).contentTransition(.opacity)
             }
