@@ -25,7 +25,6 @@ struct ServersView: View {
     @AppStorage("hideSilent") var hideSilent = false
     @AppStorage("serversMap") var showMap = false
     @State private var pasteError: String?
-    @State private var scroll = ScrollPosition(edge: .top)
     @State private var offset: CGFloat = 0
     @State private var selectedRow = SelectedRowVisibility()
 
@@ -139,7 +138,7 @@ struct ServersView: View {
                     .refreshable {
                         for subscription in library.subscriptions { await library.refresh(subscription.id) }
                     }
-                    .rememberScroll("servers", position: $scroll) { offset = $0 }
+                    .rememberScroll("servers") { offset = $0 }
                     .environment(selectedRow)
                     .onChange(of: library.selected?.id) { selectedRow.visible = true }
                     .overlay(alignment: .top) {
@@ -589,7 +588,7 @@ private struct ServerRows: View {
                     onLeading: { withAnimation(.smooth) { if library.pinned.contains(server.id) { library.pinned.remove(server.id) } else { library.pinned.insert(server.id) } } },
                     onTrailing: { deleting = server })
                 .id(server.id)
-                .onScrollVisibilityChange(threshold: 0.3) { visible in
+                .onScrollVisible(threshold: 0.3) { visible in
                     if library.selected?.id == server.id { selectedRow?.visible = visible }
                 }
                 .contextMenu {

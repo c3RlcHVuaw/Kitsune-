@@ -60,7 +60,7 @@ private struct FlowingGradient: View, @preconcurrency Animatable {
 
     private static let cold = Color(red: 0.36, green: 0.44, blue: 0.58)
     private var tint: Color {
-        alarm ? Color(red: 0.75, green: 0.16, blue: 0.16) : Self.cold.mix(with: theme.glow, by: warmth)
+        alarm ? Color(red: 0.75, green: 0.16, blue: 0.16) : Self.cold.mixed(with: theme.glow, by: Double(warmth))
     }
 
     var body: some View {

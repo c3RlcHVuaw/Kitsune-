@@ -127,12 +127,7 @@ struct ListSection<Content: View>: View {
                 .padding(.leading, 16)
             }
             VStack(spacing: 0) {
-                Group(subviews: content) { rows in
-                    ForEach(rows.indices, id: \.self) { index in
-                        rows[index]
-                        if index < rows.count - 1 { Divider().opacity(0.5).padding(.leading, 16) }
-                    }
-                }
+                _VariadicView.Tree(DividedRows()) { content }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .kGlass(in: .rect(cornerRadius: 20))
@@ -229,7 +224,7 @@ enum ButtonTheme: Hashable, RawRepresentable {
         case .sunset: Color(red: 1.0, green: 0.84, blue: 0.80)
         case .foxfire: Color(red: 0.84, green: 0.93, blue: 1.0)
         case .gold: Color(red: 1.0, green: 0.95, blue: 0.78)
-        case .custom: accent.mix(with: .white, by: 0.55)
+        case .custom: accent.mixed(with: .white, by: 0.55)
         }
     }
 
@@ -243,7 +238,7 @@ enum ButtonTheme: Hashable, RawRepresentable {
         case .sunset: Color(red: 0.85, green: 0.30, blue: 0.40)
         case .foxfire: Color(red: 0.25, green: 0.40, blue: 0.95)
         case .gold: Color(red: 0.85, green: 0.62, blue: 0.20)
-        case .custom: accent.mix(with: .black, by: 0.2)
+        case .custom: accent.mixed(with: .black, by: 0.2)
         }
     }
 
@@ -614,17 +609,27 @@ extension ButtonTheme {
 /// Where each list was scrolled: tabs are rebuilt on every switch, so coming back would otherwise start at the top.
 @MainActor enum ScrollMemory { static var offsets: [String: CGFloat] = [:] }
 
+/// Remembers the scroll offset between tab switches. Needs macOS 15 (`ScrollPosition`); on 14 lists simply start at the top.
 private struct RememberScroll: ViewModifier {
     let key: String
-    @Binding var position: ScrollPosition
     let onOffset: (CGFloat) -> Void
+
+    func body(content: Content) -> some View {
+        if #available(macOS 15, *) { content.modifier(RememberScroll15(key: key, onOffset: onOffset)) } else { content }
+    }
+}
+
+@available(macOS 15, *)
+private struct RememberScroll15: ViewModifier {
+    let key: String
+    let onOffset: (CGFloat) -> Void
+    @State private var position = ScrollPosition(edge: .top)
     /// Read when the screen is built: the fresh scroll view reports 0 first and would overwrite it.
     @State private var target: CGFloat?
     @State private var restored = false
 
-    init(key: String, position: Binding<ScrollPosition>, onOffset: @escaping (CGFloat) -> Void) {
+    init(key: String, onOffset: @escaping (CGFloat) -> Void) {
         self.key = key
-        _position = position
         self.onOffset = onOffset
         _target = State(initialValue: ScrollMemory.offsets[key])
     }
@@ -647,8 +652,13 @@ private struct RememberScroll: ViewModifier {
 }
 
 extension View {
-    func rememberScroll(_ key: String, position: Binding<ScrollPosition>, onOffset: @escaping (CGFloat) -> Void = { _ in }) -> some View {
-        modifier(RememberScroll(key: key, position: position, onOffset: onOffset))
+    func rememberScroll(_ key: String, onOffset: @escaping (CGFloat) -> Void = { _ in }) -> some View {
+        modifier(RememberScroll(key: key, onOffset: onOffset))
+    }
+
+    /// Reports when the view enters or leaves the visible part of a scroll view (macOS 15; on 14 it never fires).
+    @ViewBuilder func onScrollVisible(threshold: Double, _ action: @escaping (Bool) -> Void) -> some View {
+        if #available(macOS 15, *) { onScrollVisibilityChange(threshold: threshold, action) } else { self }
     }
 
     /// One readable column, centred, when the window is stretched wide.
@@ -682,6 +692,34 @@ extension ButtonTheme {
         return .custom(pack(c.redComponent) << 16 | pack(c.greenComponent) << 8 | pack(c.blueComponent))
         #else
         return .copper
+        #endif
+    }
+}
+
+
+/// Rows of a `ListSection` with a hairline between them (variadic view root: `Group(subviews:)` needs macOS 15).
+private struct DividedRows: _VariadicView_UnaryViewRoot {
+    func body(children: _VariadicView.Children) -> some View {
+        VStack(spacing: 0) {
+            ForEach(Array(children.enumerated()), id: \.offset) { index, child in
+                child
+                if index < children.count - 1 { Divider().opacity(0.5).padding(.leading, 16) }
+            }
+        }
+    }
+}
+
+extension Color {
+    /// Linear blend in sRGB (`Color.mix` needs macOS 15).
+    func mixed(with other: Color, by t: Double) -> Color {
+        #if os(macOS)
+        guard let a = NSColor(self).usingColorSpace(.sRGB), let b = NSColor(other).usingColorSpace(.sRGB) else { return self }
+        let f = min(max(t, 0), 1)
+        return Color(red: a.redComponent + (b.redComponent - a.redComponent) * f,
+                     green: a.greenComponent + (b.greenComponent - a.greenComponent) * f,
+                     blue: a.blueComponent + (b.blueComponent - a.blueComponent) * f)
+        #else
+        return self
         #endif
     }
 }

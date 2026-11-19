@@ -3,7 +3,7 @@ import UserNotifications
 import Network
 import Observation
 import Shared
-import Synchronization
+import os
 
 /// A subscription URL and what it last returned.
 struct Subscription: Codable, Identifiable {
@@ -411,7 +411,7 @@ final class Library {
         }
         let connection = NWConnection(host: NWEndpoint.Host(host), port: nwPort, using: parameters)
         let start = ContinuousClock.now
-        let done = Mutex(false)
+        let done = OSAllocatedUnfairLock(initialState: false)
         return await withCheckedContinuation { continuation in
             let finish: @Sendable (Int?) -> Void = { result in
                 guard done.withLock({ old in defer { old = true }; return !old }) else { return }

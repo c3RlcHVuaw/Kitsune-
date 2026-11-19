@@ -11,6 +11,10 @@ xcodebuild -project Kitsune.xcodeproj -scheme KitsuneMac -configuration Release 
 [ -x .build/sing-box-cli ] || { echo "нет .build/sing-box-cli (go build ./cmd/sing-box с тегами из build-libbox.sh)"; exit 1; }
 APP=.build/dd-mac-release/Build/Products/Release/Kitsune.app
 cp .build/sing-box-cli "$APP/Contents/Resources/sing-box"
+# The Go build is static and runs on macOS 14, but was linked with minos 15: lower it so Sonoma accepts it (app target is 14.0).
+vtool -set-build-version macos 14.0 14.0 -replace -output "$APP/Contents/Resources/sing-box.tmp" "$APP/Contents/Resources/sing-box" >/dev/null
+mv "$APP/Contents/Resources/sing-box.tmp" "$APP/Contents/Resources/sing-box"; chmod +x "$APP/Contents/Resources/sing-box"
+codesign --force -s - "$APP/Contents/Resources/sing-box" >/dev/null 2>&1
 rm -rf "$APP/Contents/Resources/RuleSets"; cp -R PacketTunnel/RuleSets "$APP/Contents/Resources/RuleSets"
 mkdir -p dist && rm -f dist/Kitsune-mac.zip
 ditto -c -k --norsrc --noextattr --keepParent .build/dd-mac-release/Build/Products/Release/Kitsune.app dist/Kitsune-mac.zip

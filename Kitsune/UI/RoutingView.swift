@@ -7,7 +7,6 @@ struct RoutingView: View {
     @Environment(\.kitsuneTheme) private var theme
     private var accent: Color { theme.accent }
     let library: Library
-    @State private var scroll = ScrollPosition(edge: .top)
 
     var body: some View {
         NavigationStack {
@@ -39,7 +38,7 @@ struct RoutingView: View {
                     .padding(.bottom, 24)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .rememberScroll("routing", position: $scroll)
+                .rememberScroll("routing")
             }
             .readableWidth()
             .iOSNavigation(title: "Маршруты") { EmptyView() }
