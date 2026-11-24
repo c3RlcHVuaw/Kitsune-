@@ -700,10 +700,11 @@ extension ButtonTheme {
 /// Rows of a `ListSection` with a hairline between them (variadic view root: `Group(subviews:)` needs macOS 15).
 private struct DividedRows: _VariadicView_UnaryViewRoot {
     func body(children: _VariadicView.Children) -> some View {
+        // ForEach over the children themselves (stable ids): enumerated offsets crash SwiftUI 5 (macOS 14) in AttributeGraph.
         VStack(spacing: 0) {
-            ForEach(Array(children.enumerated()), id: \.offset) { index, child in
+            ForEach(children) { child in
                 child
-                if index < children.count - 1 { Divider().opacity(0.5).padding(.leading, 16) }
+                if child.id != children.last?.id { Divider().opacity(0.5).padding(.leading, 16) }
             }
         }
     }

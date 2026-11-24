@@ -627,7 +627,7 @@
 "Сайты плашками с крестиком, а приложение или ссылку можно бросить на нужную секцию." = "Sites as chips with a cross, and you can drop an app or a link on the right section.";
 "Пустые списки подсказывают, что делать, а пояснения спрятаны за значок «?»." = "Empty lists say what to do, and explanations are tucked behind a \"?\".";
 "Работает на macOS 14" = "Runs on macOS 14";
-"Теперь Kitsune ставится и на Sonoma, в том числе на Mac с Intel." = "Kitsune now installs on Sonoma too, including Intel Macs.";
+"Исправлен вылет при запуске на Sonoma, в том числе на Mac с Intel." = "Fixed the launch crash on Sonoma, including Intel Macs.";
 "На звании «Ёкай» открывается выбор любого цвета для всего приложения." = "At the Yokai rank you can pick any colour for the whole app.";
 "Скорость, пинг и трафик больше не прыгают при обновлении." = "Speed, ping and traffic no longer jitter while updating.";
 "Карточки профилей, сайты чипами, перетаскивание приложений и ссылок." = "Profile cards, site chips, drag and drop for apps and links.";

@@ -6,7 +6,7 @@ struct WhatsNewView: View {
     @Environment(\.dismiss) private var dismiss
 
     private let items: [(icon: String, color: Color, title: String, text: String)] = [
-        ("macbook", .blue, "Работает на macOS 14", "Теперь Kitsune ставится и на Sonoma, в том числе на Mac с Intel."),
+        ("macbook", .blue, "Работает на macOS 14", "Исправлен вылет при запуске на Sonoma, в том числе на Mac с Intel."),
         ("paintpalette.fill", .purple, "Свой цвет темы", "На звании «Ёкай» открывается выбор любого цвета для всего приложения."),
         ("textformat.123", .green, "Ровные цифры", "Скорость, пинг и трафик больше не прыгают при обновлении."),
         ("point.topleft.down.curvedto.point.bottomright.up.fill", .orange, "Маршруты по-новому", "Карточки профилей, сайты чипами, перетаскивание приложений и ссылок."),
