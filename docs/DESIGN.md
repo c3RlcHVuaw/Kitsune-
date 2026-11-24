@@ -21,7 +21,7 @@ into a `Scroll` frame with `paddingRight 18` and an absolute `Scroll thumb` at x
 
 - **Color** (mode Dark): `bg/base`, `text/{primary,secondary,tertiary}`, `border/{subtle,strong,faint}`,
   `glass/{tint,tint-strong}`, `brand/{orange,deep,alarm}`, `status/{connected,warning,alert}`,
-  `theme/{copper,moon,neon}/{accent,soft,glow}`, `chip/copper-{bg,stroke}`, `toggle/{track,knob}`,
+  `theme/{copper,moon,neon}/{accent,soft,glow}`, `theme/{aurora,sunset,foxfire,gold}/accent`, `chip/copper-{bg,stroke}`, `toggle/{track,knob}`,
   `button/disc-copper`, `control/selected`, `chart/well`, `scroll/thumb`, `halo`, `titlebar/dot`, `surface/*`.
 - **Spacing**: `space/xs…3xl` (4–32). **Radius**: `radius/sm…full` (12–999).
 - Translucent colours are separate tokens with alpha. Do not put opacity on a variable-bound paint: Figma drops it.
@@ -58,14 +58,20 @@ Code ↔ token: `Color.brand` = `brand/orange`, `ButtonTheme.accent/soft/glow` =
 | Chip | 26:172 | link and recent capsules |
 | SegmentedControl (Selected) | 26:199 | routing profile picker |
 | PageHeader | 26:202 | page titles |
-| ListRow (Trailing: None, Toggle, Value, Picker, Chevron, Check) | 28:142 | `ListRow` inside `ListSection` |
+| ListRow (Trailing: None, Toggle, Value, Picker, Chevron, Check; Show tile → exposed RowIcon) | 28:142 | `ListRow` inside `ListSection` |
 | ServerRow (Selected) | 28:171 | server list row |
-| ThemeDots (Selected) | 28:198 | button colour picker |
+| ThemeDots (Selected, Rewards locked) | 28:198 | button colour picker: 3 themes, 4 reward themes, own colour |
 | TrafficCard | 28:201 | settings traffic card |
 | BlockCard (Visible) | 28:291 | `HomeLayoutEditor` |
 | BrandButton | 52:536 | `.buttonStyle(.brand)` |
 | PageDots (Step) | 52:552 | onboarding dots |
 | QRCode | 52:555 | `ShareQRView` (placeholder pattern) |
+| Fox/WithTails (Tails: 1, 2, 3, 4, 9) | 109:2081 | `FoxWithTails` (rank tails) |
+| Icon/lock | 109:588 | `lock.fill` |
+| RowIcon (On) | 105:549 | Routes row leading tile |
+| ProfileCard (Selected) | 105:564 | Routes profile picker |
+| SectionTitle (Icon, Title, Help) | 105:571 | `ListSection(title:symbol:footerAsHelp:)` |
+| HelpDot | 105:567 | `HelpButton` |
 
 Ids are hints; find components by name if one moved.
 
@@ -86,6 +92,23 @@ Fluent controls, copper accent. Window **1000 × 680**, radius 8, `Win/TitleBar`
   `Win/ServerRow` (Selected), `Win/InfoBar` (Severity).
 - Screens: Главная (подключено/отключено, two columns: hero card + 300 px right column), Серверы, Маршруты,
   Настройки, tray flyout (360, acrylic) instead of the macOS menu bar.
+
+## Android (Material 3) — page “Android”
+
+Design-only (no Android build). Native Material 3 / Material You, dark scheme generated from the copper seed `#FF801A`;
+no glass, no Unbounded. Screen **412 × 915**, radius 28: `Android/StatusBar` (VPN: Off/On, key icon when tunnelled) →
+top app bar (Title Large + 48 px icon buttons) → content (padding 16, gap 12) → `Android/NavigationBar` (Tab) →
+`Android/GestureBar`.
+
+- Tokens: collection **Android M3** (`m3/primary`, `m3/primaryContainer`, `m3/secondaryContainer`, `m3/surface`,
+  `m3/surfaceContainer{Lowest,Low,,High,Highest}`, `m3/onSurface{,Variant}`, `m3/outline{,Variant}`, `m3/error`, …),
+  code syntax `MaterialTheme.colorScheme.*`.
+- Type: `M3/*` styles (Display Small … Label Small), Roboto. Icons: **Material Symbols Rounded** as ligature text
+  (e.g. `shield`, `dns`, `alt_route`, `settings`).
+- Components: `Android/StatusBar`, `Android/NavigationBar`, `Android/GestureBar`, `Android/Switch` (Selected).
+  Lists are grouped cards (`surfaceContainer`, radius 20) of 56 px list items; section headers Title Small `primary`.
+- Screens: Главная (отключено/подключено, big power toggle), Серверы (filter chips, list, extended FAB), Маршруты
+  (segmented button, per-app split tunnelling, site chips), Настройки (Always-on VPN link, quick settings tile, Material You).
 
 ## Working with the file through the Figma API (agents)
 
