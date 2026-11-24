@@ -7,9 +7,11 @@
 
 [![Скачать для macOS](https://img.shields.io/badge/Скачать-macOS_.dmg-F28C28?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/c3RlcHVuaw/Kitsune-/releases/latest/download/Kitsune-mac.dmg)
 [![ZIP](https://img.shields.io/badge/Скачать-.zip-2b2b2f?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/c3RlcHVuaw/Kitsune-/releases/latest/download/Kitsune-mac.zip)
+[![Скачать для Windows](https://img.shields.io/badge/Скачать-Windows_.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/c3RlcHVuaw/Kitsune-/releases/download/v1.8.1-win3/Kitsune-Setup.exe)
 [![Все релизы](https://img.shields.io/badge/Все_релизы-GitHub-2b2b2f?style=for-the-badge&logo=github&logoColor=white)](https://github.com/c3RlcHVuaw/Kitsune-/releases)
 
-![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?style=flat-square)
+![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black?style=flat-square)
+![Windows 10+](https://img.shields.io/badge/Windows-10%2B-0078D4?style=flat-square)
 ![SwiftUI](https://img.shields.io/badge/SwiftUI-Liquid_Glass-F28C28?style=flat-square)
 ![sing-box](https://img.shields.io/badge/core-sing--box-2b2b2f?style=flat-square)
 
